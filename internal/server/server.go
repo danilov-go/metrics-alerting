@@ -7,15 +7,20 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 )
 
+const defaultPort = "localhost:8080"
+
 type Server struct {
 	Server *http.Server
 }
 
-func New(s *repository.MemStorage) *Server {
+func New(port string, s *repository.MemStorage) *Server {
+	if port == "" {
+		port = defaultPort
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/update/", handler.MetricsHandler(s))
 	server := &http.Server{
-		Addr:    "localhost:8080",
+		Addr:    port,
 		Handler: mux,
 	}
 	return &Server{

@@ -8,7 +8,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 )
 
-func MetricsHandler(m *repository.MemStorage) http.HandlerFunc {
+func MetricsHandler(s *repository.MemStorage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -31,7 +31,7 @@ func MetricsHandler(m *repository.MemStorage) http.HandlerFunc {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			m.SaveGauges(metric[3], valueMetric)
+			s.SaveGauges(metric[3], valueMetric)
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 		case "counter":
@@ -40,7 +40,7 @@ func MetricsHandler(m *repository.MemStorage) http.HandlerFunc {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			m.SaveCounters(metric[3], int64(valueMetric))
+			s.SaveCounters(metric[3], int64(valueMetric))
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 		default:

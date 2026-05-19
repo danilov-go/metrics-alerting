@@ -10,7 +10,7 @@ func main() {
 		Gauges:   make(map[string]float64),
 		Counters: make(map[string]int64),
 	}
-	serv := server.New(metricsStorage)
+	serv := server.New("", metricsStorage)
 	if err := serv.Run(); err != nil {
 		panic(err)
 	}
