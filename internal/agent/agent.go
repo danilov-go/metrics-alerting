@@ -2,29 +2,29 @@ package agent
 
 import (
 	"fmt"
-	"io"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
 	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 const defaultPort = "localhost:8080"
 
 type Agent struct {
-	Client http.Client
-	Port   string
+	Client *resty.Client
 }
 
 func New(port string) *Agent {
 	if port == "" {
 		port = defaultPort
 	}
+	client := resty.New()
+	client.SetTimeout(time.Second * 1)
+	client.SetBaseURL("http://" + port)
 	return &Agent{
-		Client: http.Client{
-			Timeout: time.Second * 1,
-		},
-		Port: port,
+		Client: client,
 	}
 }
 
@@ -37,26 +37,20 @@ func (a *Agent) Run(pollCount *int64, step int) {
 			if name == "PollCount" {
 				metricType = "counter"
 			}
-			url := fmt.Sprintf("http://%s/update/%s/%s/%s", a.Port, metricType, name, val)
-			request, err := http.NewRequest(http.MethodPost, url, nil)
+			response, err := a.Client.R().
+				SetHeader("Content-Type", "text/plain; charset=utf-8").
+				SetPathParams(map[string]string{
+					"mType": metricType,
+					"mName": name,
+					"mVal":  val,
+				}).
+				Post("/update/{mType}/{mName}/{mVal}")
 			if err != nil {
 				fmt.Println(err)
 				continue
 			}
-			request.Header.Set("Content-Type", "text/plain; charset=utf-8")
-			response, err := a.Client.Do(request)
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			_, err = io.Copy(io.Discard, response.Body)
-			response.Body.Close()
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			if response.StatusCode != http.StatusOK {
-				fmt.Println(response.Status)
+			if response.StatusCode() != http.StatusOK {
+				fmt.Println(response.Status())
 				continue
 			}
 		}

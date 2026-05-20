@@ -5,6 +5,7 @@ import (
 
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
+	"github.com/go-chi/chi/v5"
 )
 
 const defaultPort = "localhost:8080"
@@ -17,11 +18,13 @@ func New(port string, s *repository.MemStorage) *Server {
 	if port == "" {
 		port = defaultPort
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/update/", handler.MetricsHandler(s))
+	r := chi.NewRouter()
+	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(s))
+	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(s))
+	r.Get("/", handler.ExposeMetricsHandler(s))
 	server := &http.Server{
 		Addr:    port,
-		Handler: mux,
+		Handler: r,
 	}
 	return &Server{
 		Server: server,

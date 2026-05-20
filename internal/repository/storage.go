@@ -8,6 +8,10 @@ type MemStorage struct {
 type Storage interface {
 	SaveGauges(name string, value float64)
 	SaveCounters(name string, value int64)
+	GetGauges(name string) (float64, bool)
+	GetCounters(name string) (int64, bool)
+	GetAllGauges() map[string]float64
+	GetAllCounters() map[string]int64
 }
 
 func (g *MemStorage) SaveGauges(name string, value float64) {
@@ -26,4 +30,34 @@ func (c *MemStorage) SaveCounters(name string, value int64) {
 	} else {
 		c.Counters[name] = value
 	}
+}
+
+func (g *MemStorage) GetGauges(name string) (float64, bool) {
+	if g.Gauges == nil {
+		g.Gauges = make(map[string]float64)
+	}
+	val, ok := g.Gauges[name]
+	return val, ok
+}
+
+func (c *MemStorage) GetCounters(name string) (int64, bool) {
+	if c.Counters == nil {
+		c.Counters = make(map[string]int64)
+	}
+	val, ok := c.Counters[name]
+	return val, ok
+}
+
+func (g *MemStorage) GetAllGauges() map[string]float64 {
+	if g.Gauges == nil {
+		g.Gauges = make(map[string]float64)
+	}
+	return g.Gauges
+}
+
+func (c *MemStorage) GetAllCounters() map[string]int64 {
+	if c.Counters == nil {
+		c.Counters = make(map[string]int64)
+	}
+	return c.Counters
 }

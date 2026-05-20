@@ -5,9 +5,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
-	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,28 +45,27 @@ func TestAgent_Run(t *testing.T) {
 		"PollCount",
 	}
 	storage := make(map[string]bool)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, http.MethodPost, r.Method)
+	r := chi.NewRouter()
+	r.Post("/update/{mType}/{mName}/{mVal}", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "text/plain; charset=utf-8", r.Header.Get("Content-Type"))
-		path := r.URL.Path
-		metric := strings.Split(path, "/")
-		if len(metric) > 4 {
-			name := metric[3]
-			storage[name] = true
-			switch metric[2] {
-			case "gauge":
-				_, err := strconv.ParseFloat(metric[4], 64)
-				assert.NoError(t, err)
-			case "counter":
-				_, err := strconv.Atoi(metric[4])
-				assert.NoError(t, err)
-				assert.Equal(t, "PollCount", metric[3])
-			default:
-				t.Errorf("неизвестный тип метрики: %s", metric[1])
-			}
+		mType := chi.URLParam(r, "mType")
+		mName := chi.URLParam(r, "mName")
+		mVal := chi.URLParam(r, "mVal")
+		storage[mName] = true
+		switch mType {
+		case "gauge":
+			_, err := strconv.ParseFloat(mVal, 64)
+			assert.NoError(t, err)
+		case "counter":
+			_, err := strconv.Atoi(mVal)
+			assert.NoError(t, err)
+			assert.Equal(t, "PollCount", mName)
+		default:
+			t.Errorf("неизвестный тип метрики: %s", mType)
 		}
 		w.WriteHeader(http.StatusOK)
-	}))
+	})
+	server := httptest.NewServer(r)
 	defer server.Close()
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
