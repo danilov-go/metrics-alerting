@@ -62,7 +62,7 @@ func GetMetricHandler(s *repository.MemStorage) http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "%f", val)
+			fmt.Fprintf(w, "%v", val)
 		case "counter":
 			val, valid := s.GetCounters(mName)
 			if !valid {
@@ -71,7 +71,7 @@ func GetMetricHandler(s *repository.MemStorage) http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "%d", val)
+			fmt.Fprintf(w, "%v", val)
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -90,10 +90,10 @@ func ExposeMetricsHandler(s *repository.MemStorage) http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusOK)
 		for name, val := range mapGauge {
-			fmt.Fprintf(w, "%s : %f<br>\n", name, val)
+			fmt.Fprintf(w, "%v : %v<br>\n", name, val)
 		}
 		for name, val := range mapCounter {
-			fmt.Fprintf(w, "%s : %d<br>\n", name, val)
+			fmt.Fprintf(w, "%v : %v<br>\n", name, val)
 		}
 	}
 }

@@ -188,9 +188,9 @@ func TestGetMetricHandler(t *testing.T) {
 			if w.Code == http.StatusOK {
 				switch tt.mType {
 				case "counter":
-					assert.Equal(t, fmt.Sprintf("%d", tt.expected.valC), w.Body.String())
+					assert.Equal(t, fmt.Sprintf("%v", tt.expected.valC), w.Body.String())
 				case "gauge":
-					assert.Equal(t, fmt.Sprintf("%f", tt.expected.valG), w.Body.String())
+					assert.Equal(t, fmt.Sprintf("%v", tt.expected.valG), w.Body.String())
 				}
 			}
 		})
@@ -276,11 +276,11 @@ func TestExposeMetricHandler(t *testing.T) {
 			if w.Code == http.StatusOK {
 				for name, val := range storage.Gauges {
 					assert.Contains(t, body, name)
-					assert.Contains(t, body, fmt.Sprintf("%f", val))
+					assert.Contains(t, body, fmt.Sprintf("%v", val))
 				}
 				for name, val := range storage.Counters {
 					assert.Contains(t, body, name)
-					assert.Contains(t, body, fmt.Sprintf("%d", val))
+					assert.Contains(t, body, fmt.Sprintf("%v", val))
 				}
 			}
 		})
