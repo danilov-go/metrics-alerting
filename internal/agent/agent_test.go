@@ -72,7 +72,7 @@ func TestAgent_Run(t *testing.T) {
 	a := New(u.Host)
 	var pollCount int64 = 4
 	step := 5
-	a.Run(&pollCount, step)
+	a.Run(&pollCount, int64(step))
 	assert.Equal(t, int64(5), pollCount)
 	for _, v := range expMetric {
 		assert.Contains(t, storage, v)

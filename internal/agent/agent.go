@@ -10,16 +10,11 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const defaultPort = "localhost:8080"
-
 type Agent struct {
 	Client *resty.Client
 }
 
 func New(port string) *Agent {
-	if port == "" {
-		port = defaultPort
-	}
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
 	client.SetBaseURL("http://" + port)
@@ -28,10 +23,10 @@ func New(port string) *Agent {
 	}
 }
 
-func (a *Agent) Run(pollCount *int64, step int) {
+func (a *Agent) Run(pollCount *int64, step int64) {
 	var metricMap map[string]string
 	metricMap = metricGet(pollCount)
-	if *pollCount != 0 && int(*pollCount)%step == 0 {
+	if *pollCount != 0 && *pollCount%step == 0 {
 		for name, val := range metricMap {
 			metricType := "gauge"
 			if name == "PollCount" {
