@@ -5,15 +5,6 @@ type MemStorage struct {
 	Counters map[string]int64
 }
 
-type Storage interface {
-	SaveGauges(name string, value float64)
-	SaveCounters(name string, value int64)
-	GetGauges(name string) (float64, bool)
-	GetCounters(name string) (int64, bool)
-	GetAllGauges() map[string]float64
-	GetAllCounters() map[string]int64
-}
-
 func (g *MemStorage) SaveGauges(name string, value float64) {
 	if g.Gauges == nil {
 		g.Gauges = make(map[string]float64)

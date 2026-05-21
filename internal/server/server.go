@@ -3,8 +3,6 @@ package server
 import (
 	"net/http"
 
-	"github.com/danilov-go/metrics-alerting.git/internal/handler"
-	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -12,11 +10,7 @@ type Server struct {
 	Server *http.Server
 }
 
-func New(port string, s *repository.MemStorage) *Server {
-	r := chi.NewRouter()
-	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(s))
-	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(s))
-	r.Get("/", handler.ExposeMetricsHandler(s))
+func New(port string, r *chi.Mux) *Server {
 	server := &http.Server{
 		Addr:    port,
 		Handler: r,

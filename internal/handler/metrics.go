@@ -5,12 +5,19 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/danilov-go/metrics-alerting.git/internal/repository"
-
 	"github.com/go-chi/chi/v5"
 )
 
-func PostMetricsHandler(s *repository.MemStorage) http.HandlerFunc {
+type Storage interface {
+	SaveGauges(name string, value float64)
+	SaveCounters(name string, value int64)
+	GetGauges(name string) (float64, bool)
+	GetCounters(name string) (int64, bool)
+	GetAllGauges() map[string]float64
+	GetAllCounters() map[string]int64
+}
+
+func PostMetricsHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mType := chi.URLParam(r, "mType")
 		mName := chi.URLParam(r, "mName")
@@ -45,7 +52,7 @@ func PostMetricsHandler(s *repository.MemStorage) http.HandlerFunc {
 	}
 }
 
-func GetMetricHandler(s *repository.MemStorage) http.HandlerFunc {
+func GetMetricHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mType := chi.URLParam(r, "mType")
 		mName := chi.URLParam(r, "mName")
@@ -79,7 +86,7 @@ func GetMetricHandler(s *repository.MemStorage) http.HandlerFunc {
 	}
 }
 
-func ExposeMetricsHandler(s *repository.MemStorage) http.HandlerFunc {
+func ExposeMetricsHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mapGauge := s.GetAllGauges()
 		mapCounter := s.GetAllCounters()
