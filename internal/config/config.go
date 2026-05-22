@@ -46,6 +46,9 @@ func (s *ConfigServer) Get() {
 	f := flag.NewFlagSet("Run server", flag.ContinueOnError)
 	f.Var(&s.Net, "a", "Net address host:port")
 	err := f.Parse(os.Args[1:])
+	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
+		s.Net.Set(envRunAddr)
+	}
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -58,6 +61,25 @@ func (a *ConfigAgent) Get() {
 	f.IntVar(&a.ReportInterval, "r", a.ReportInterval, "ReportInterval")
 	f.IntVar(&a.PollInterval, "p", a.PollInterval, "PollInterval")
 	err := f.Parse(os.Args[1:])
+	if envRunAddr := os.Getenv("ADDRESS"); envRunAddr != "" {
+		a.Net.Set(envRunAddr)
+	}
+	if envReportInterval := os.Getenv("REPORT_INTERVAL"); envReportInterval != "" {
+		reportInterval, err := strconv.Atoi(envReportInterval)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		a.ReportInterval = reportInterval
+	}
+	if envPollInterval := os.Getenv("POLL_INTERVAL"); envPollInterval != "" {
+		pollInterval, err := strconv.Atoi(envPollInterval)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		a.PollInterval = pollInterval
+	}
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
