@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/logger"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,7 +70,7 @@ func TestAgent_Run(t *testing.T) {
 	defer server.Close()
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	a := New(u.Host)
+	a := New(u.Host, logger.Log.Sugar())
 	var pollCount int64 = 4
 	step := 5
 	a.Run(&pollCount, int64(step))

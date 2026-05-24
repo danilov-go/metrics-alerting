@@ -10,16 +10,22 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-type Agent struct {
-	Client *resty.Client
+type log interface {
+	Error(args ...any)
 }
 
-func New(port string) *Agent {
+type Agent struct {
+	Client *resty.Client
+	Logger log
+}
+
+func New(port string, l log) *Agent {
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
 	client.SetBaseURL("http://" + port)
 	return &Agent{
 		Client: client,
+		Logger: l,
 	}
 }
 
@@ -41,11 +47,11 @@ func (a *Agent) Run(pollCount *int64, step int64) {
 				}).
 				Post("/update/{mType}/{mName}/{mVal}")
 			if err != nil {
-				fmt.Println(err)
+				a.Logger.Error(err.Error())
 				continue
 			}
 			if response.StatusCode() != http.StatusOK {
-				fmt.Println(response.Status())
+				a.Logger.Error(response.Status())
 				continue
 			}
 		}
