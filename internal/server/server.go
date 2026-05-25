@@ -5,7 +5,7 @@ import (
 )
 
 type log interface {
-	Info(args ...any)
+	Infow(msg string, keysAndValues ...any)
 }
 
 type Server struct {
@@ -25,6 +25,6 @@ func New(port string, l log, r http.Handler) *Server {
 }
 
 func (serv *Server) Run() error {
-	serv.Logger.Info("Running server", "address", serv.Server.Addr)
+	serv.Logger.Infow("Running server", "address", serv.Server.Addr)
 	return serv.Server.ListenAndServe()
 }

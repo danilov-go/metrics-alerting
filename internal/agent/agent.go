@@ -11,7 +11,7 @@ import (
 )
 
 type log interface {
-	Error(args ...any)
+	Errorw(msg string, keysAndValues ...any)
 }
 
 type Agent struct {
@@ -47,11 +47,11 @@ func (a *Agent) Run(pollCount *int64, step int64) {
 				}).
 				Post("/update/{mType}/{mName}/{mVal}")
 			if err != nil {
-				a.Logger.Error(err.Error())
+				a.Logger.Errorw("ошибка формирования запроса", "err", err)
 				continue
 			}
 			if response.StatusCode() != http.StatusOK {
-				a.Logger.Error(response.Status())
+				a.Logger.Errorw("статус запроса:", "status", response.StatusCode())
 				continue
 			}
 		}

@@ -25,7 +25,7 @@ func main() {
 		Counters: make(map[string]int64),
 	}
 	r := chi.NewRouter()
-	r.Use(handler.RequestLogger)
+	r.Use(handler.RequestLogger(logger.Log))
 	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(metricsStorage))
 	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(metricsStorage))
 	r.Get("/", handler.ExposeMetricsHandler(metricsStorage))
