@@ -1,12 +1,12 @@
 package agent
 
 import (
-	"fmt"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
 	"time"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -30,22 +30,14 @@ func New(port string, l log) *Agent {
 }
 
 func (a *Agent) Run(pollCount *int64, step int64) {
-	var metricMap map[string]string
-	metricMap = metricGet(pollCount)
+
+	metrics := metricGet(pollCount)
 	if *pollCount != 0 && *pollCount%step == 0 {
-		for name, val := range metricMap {
-			metricType := "gauge"
-			if name == "PollCount" {
-				metricType = "counter"
-			}
+		for _, m := range metrics {
 			response, err := a.Client.R().
-				SetHeader("Content-Type", "text/plain; charset=utf-8").
-				SetPathParams(map[string]string{
-					"mType": metricType,
-					"mName": name,
-					"mVal":  val,
-				}).
-				Post("/update/{mType}/{mName}/{mVal}")
+				SetHeader("Content-Type", "application/json").
+				SetBody(m).
+				Post("/update")
 			if err != nil {
 				a.Logger.Errorw("ошибка формирования запроса", "err", err)
 				continue
@@ -58,41 +50,43 @@ func (a *Agent) Run(pollCount *int64, step int64) {
 	}
 }
 
-func metricGet(pollCount *int64) map[string]string {
+func metricGet(pollCount *int64) []models.Metrics {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	randomValue := rand.Float64()
 	*pollCount++
-	metricMap := map[string]string{
-		"Alloc":         fmt.Sprintf("%v", float64(m.Alloc)),
-		"BuckHashSys":   fmt.Sprintf("%v", float64(m.BuckHashSys)),
-		"Frees":         fmt.Sprintf("%v", float64(m.Frees)),
-		"GCCPUFraction": fmt.Sprintf("%v", float64(m.GCCPUFraction)),
-		"GCSys":         fmt.Sprintf("%v", float64(m.GCSys)),
-		"HeapAlloc":     fmt.Sprintf("%v", float64(m.HeapAlloc)),
-		"HeapIdle":      fmt.Sprintf("%v", float64(m.HeapIdle)),
-		"HeapInuse":     fmt.Sprintf("%v", float64(m.HeapInuse)),
-		"HeapObjects":   fmt.Sprintf("%v", float64(m.HeapObjects)),
-		"HeapReleased":  fmt.Sprintf("%v", float64(m.HeapReleased)),
-		"HeapSys":       fmt.Sprintf("%v", float64(m.HeapSys)),
-		"LastGC":        fmt.Sprintf("%v", float64(m.LastGC)),
-		"Lookups":       fmt.Sprintf("%v", float64(m.Lookups)),
-		"MCacheInuse":   fmt.Sprintf("%v", float64(m.MCacheInuse)),
-		"MCacheSys":     fmt.Sprintf("%v", float64(m.MCacheSys)),
-		"MSpanInuse":    fmt.Sprintf("%v", float64(m.MSpanInuse)),
-		"MSpanSys":      fmt.Sprintf("%v", float64(m.MSpanSys)),
-		"Mallocs":       fmt.Sprintf("%v", float64(m.Mallocs)),
-		"NextGC":        fmt.Sprintf("%v", float64(m.NextGC)),
-		"NumForcedGC":   fmt.Sprintf("%v", float64(m.NumForcedGC)),
-		"NumGC":         fmt.Sprintf("%v", float64(m.NumGC)),
-		"OtherSys":      fmt.Sprintf("%v", float64(m.OtherSys)),
-		"PauseTotalNs":  fmt.Sprintf("%v", float64(m.PauseTotalNs)),
-		"StackInuse":    fmt.Sprintf("%v", float64(m.StackInuse)),
-		"StackSys":      fmt.Sprintf("%v", float64(m.StackSys)),
-		"Sys":           fmt.Sprintf("%v", float64(m.Sys)),
-		"TotalAlloc":    fmt.Sprintf("%v", float64(m.TotalAlloc)),
-		"RandomValue":   fmt.Sprintf("%v", float64(randomValue)),
-		"PollCount":     fmt.Sprintf("%v", *pollCount),
+	return []models.Metrics{
+		{ID: "Alloc", MType: models.Gauge, Value: pointerFloat64(float64(m.Alloc))},
+		{ID: "BuckHashSys", MType: models.Gauge, Value: pointerFloat64(float64(m.BuckHashSys))},
+		{ID: "Frees", MType: models.Gauge, Value: pointerFloat64(float64(m.Frees))},
+		{ID: "GCCPUFraction", MType: models.Gauge, Value: pointerFloat64(float64(m.GCCPUFraction))},
+		{ID: "GCSys", MType: models.Gauge, Value: pointerFloat64(float64(m.GCSys))},
+		{ID: "HeapAlloc", MType: models.Gauge, Value: pointerFloat64(float64(m.HeapAlloc))},
+		{ID: "HeapIdle", MType: models.Gauge, Value: pointerFloat64(float64(m.HeapIdle))},
+		{ID: "HeapInuse", MType: models.Gauge, Value: pointerFloat64(float64(m.HeapInuse))},
+		{ID: "HeapObjects", MType: models.Gauge, Value: pointerFloat64(float64(m.HeapObjects))},
+		{ID: "HeapReleased", MType: models.Gauge, Value: pointerFloat64(float64(m.HeapReleased))},
+		{ID: "HeapSys", MType: models.Gauge, Value: pointerFloat64(float64(m.HeapSys))},
+		{ID: "LastGC", MType: models.Gauge, Value: pointerFloat64(float64(m.LastGC))},
+		{ID: "Lookups", MType: models.Gauge, Value: pointerFloat64(float64(m.Lookups))},
+		{ID: "MCacheInuse", MType: models.Gauge, Value: pointerFloat64(float64(m.MCacheInuse))},
+		{ID: "MCacheSys", MType: models.Gauge, Value: pointerFloat64(float64(m.MCacheSys))},
+		{ID: "MSpanInuse", MType: models.Gauge, Value: pointerFloat64(float64(m.MSpanInuse))},
+		{ID: "MSpanSys", MType: models.Gauge, Value: pointerFloat64(float64(m.MSpanSys))},
+		{ID: "Mallocs", MType: models.Gauge, Value: pointerFloat64(float64(m.Mallocs))},
+		{ID: "NextGC", MType: models.Gauge, Value: pointerFloat64(float64(m.NextGC))},
+		{ID: "NumForcedGC", MType: models.Gauge, Value: pointerFloat64(float64(m.NumForcedGC))},
+		{ID: "NumGC", MType: models.Gauge, Value: pointerFloat64(float64(m.NumGC))},
+		{ID: "OtherSys", MType: models.Gauge, Value: pointerFloat64(float64(m.OtherSys))},
+		{ID: "PauseTotalNs", MType: models.Gauge, Value: pointerFloat64(float64(m.PauseTotalNs))},
+		{ID: "StackInuse", MType: models.Gauge, Value: pointerFloat64(float64(m.StackInuse))},
+		{ID: "StackSys", MType: models.Gauge, Value: pointerFloat64(float64(m.StackSys))},
+		{ID: "Sys", MType: models.Gauge, Value: pointerFloat64(float64(m.Sys))},
+		{ID: "TotalAlloc", MType: models.Gauge, Value: pointerFloat64(float64(m.TotalAlloc))},
+		{ID: "RandomValue", MType: models.Gauge, Value: pointerFloat64(float64(randomValue))},
+		{ID: "PollCount", MType: models.Counter, Delta: pollCount},
 	}
-	return metricMap
+}
+func pointerFloat64(val float64) *float64 {
+	return &val
 }

@@ -1,11 +1,12 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danilov-go/metrics-alerting.git/internal/models"
 )
 
 type Storage interface {
@@ -19,70 +20,85 @@ type Storage interface {
 
 func PostMetricsHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mType := chi.URLParam(r, "mType")
-		mName := chi.URLParam(r, "mName")
-		mVal := chi.URLParam(r, "mVal")
-		if mName == "" {
+		var m models.Metrics
+		var buf bytes.Buffer
+		_, err := buf.ReadFrom(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err = json.Unmarshal(buf.Bytes(), &m); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if m.ID == "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		switch mType {
-		case "gauge":
-			valueMetric, err := strconv.ParseFloat(mVal, 64)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			s.SaveGauges(mName, valueMetric)
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
-		case "counter":
-			valueMetric, err := strconv.Atoi(mVal)
-			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			s.SaveCounters(mName, int64(valueMetric))
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
+		switch m.MType {
+		case models.Gauge:
+			s.SaveGauges(m.ID, *m.Value)
+		case models.Counter:
+			s.SaveCounters(m.ID, *m.Delta)
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		resp, err := json.Marshal(m)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(resp)
 	}
 }
 
 func GetMetricHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mType := chi.URLParam(r, "mType")
-		mName := chi.URLParam(r, "mName")
-		if mName == "" {
+		var m models.Metrics
+		var buf bytes.Buffer
+		_, err := buf.ReadFrom(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err = json.Unmarshal(buf.Bytes(), &m); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if m.ID == "" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		switch mType {
-		case "gauge":
-			val, valid := s.GetGauges(mName)
+		switch m.MType {
+		case models.Gauge:
+			val, valid := s.GetGauges(m.ID)
 			if !valid {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "%v", val)
-		case "counter":
-			val, valid := s.GetCounters(mName)
+			m.Value = &val
+		case models.Counter:
+			val, valid := s.GetCounters(m.ID)
 			if !valid {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "%v", val)
+			m.Delta = &val
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		resp, err := json.Marshal(m)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(resp)
 	}
 }
 

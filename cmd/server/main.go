@@ -26,8 +26,8 @@ func main() {
 	}
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
-	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(metricsStorage))
-	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(metricsStorage))
+	r.Post("/update", handler.PostMetricsHandler(metricsStorage))
+	r.Post("/value", handler.GetMetricHandler(metricsStorage))
 	r.Get("/", handler.ExposeMetricsHandler(metricsStorage))
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {
