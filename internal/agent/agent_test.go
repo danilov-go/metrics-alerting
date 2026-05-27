@@ -49,7 +49,7 @@ func TestAgent_Run(t *testing.T) {
 	}
 	storage := make(map[string]bool)
 	r := chi.NewRouter()
-	r.Post("/update", func(w http.ResponseWriter, r *http.Request) {
+	r.Post("/update/", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 		var m models.Metrics
 		var buf bytes.Buffer

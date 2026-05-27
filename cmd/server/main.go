@@ -29,7 +29,9 @@ func main() {
 	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(metricsStorage))
 	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(metricsStorage))
 	r.Post("/update", handler.ApiUpdateHandler(metricsStorage))
+	r.Post("/update/", handler.ApiUpdateHandler(metricsStorage))
 	r.Post("/value", handler.ApiValueHandler(metricsStorage))
+	r.Post("/value/", handler.ApiValueHandler(metricsStorage))
 	r.Get("/", handler.ExposeMetricsHandler(metricsStorage))
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {

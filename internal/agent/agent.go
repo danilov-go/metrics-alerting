@@ -37,7 +37,7 @@ func (a *Agent) Run(pollCount *int64, step int64) {
 			response, err := a.Client.R().
 				SetHeader("Content-Type", "application/json").
 				SetBody(m).
-				Post("/update")
+				Post("/update/")
 			if err != nil {
 				a.Logger.Errorw("ошибка формирования запроса", "err", err)
 				continue
