@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 
 	"net/http"
 
@@ -13,6 +14,10 @@ func ApiUpdateHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m models.Metrics
 		var buf bytes.Buffer
+		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+			http.Error(w, "не верный контент тип", http.StatusBadRequest)
+			return
+		}
 		_, err := buf.ReadFrom(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -50,6 +55,10 @@ func ApiValueHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m models.Metrics
 		var buf bytes.Buffer
+		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+			http.Error(w, "не верный контент тип", http.StatusBadRequest)
+			return
+		}
 		_, err := buf.ReadFrom(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

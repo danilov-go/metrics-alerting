@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -51,14 +52,15 @@ func TestAgent_Run(t *testing.T) {
 	r := chi.NewRouter()
 	r.Post("/update/", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
 		var m models.Metrics
 		var buf bytes.Buffer
-		_, err := buf.ReadFrom(r.Body)
+		wg, err := gzip.NewReader(r.Body)
 		assert.NoError(t, err)
-
+		_, err = buf.ReadFrom(wg)
+		assert.NoError(t, err)
 		err = json.Unmarshal(buf.Bytes(), &m)
 		assert.NoError(t, err)
-
 		storage[m.ID] = true
 		switch m.MType {
 		case models.Gauge:

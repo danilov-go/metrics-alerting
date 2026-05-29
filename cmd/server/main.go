@@ -26,6 +26,7 @@ func main() {
 	}
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
+	r.Use(handler.GzipMiddleware)
 	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(metricsStorage))
 	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(metricsStorage))
 	r.Post("/update", handler.ApiUpdateHandler(metricsStorage))
