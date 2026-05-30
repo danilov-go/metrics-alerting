@@ -39,11 +39,11 @@ func (a *Agent) Run(pollCount *int64, step int64) {
 			var buf bytes.Buffer
 			wg := gzip.NewWriter(&buf)
 			err := json.NewEncoder(wg).Encode(m)
+			wg.Close()
 			if err != nil {
 				a.Logger.Errorw("ошибка сжатия данных", "err", err)
 				continue
 			}
-			wg.Close()
 			response, err := a.Client.R().
 				SetHeader("Content-Type", "application/json").
 				SetHeader("Content-Encoding", "gzip").

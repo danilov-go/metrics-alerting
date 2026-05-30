@@ -1,6 +1,8 @@
 package main
 
 import (
+	"time"
+
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
 	"github.com/danilov-go/metrics-alerting.git/internal/logger"
@@ -33,6 +35,10 @@ func main() {
 		if err != nil {
 			logger.Log.Info("не удалось восстановить метрики из файла", zap.Error(err))
 		}
+	}
+	if configs.StoreIntrval > 0 {
+		storeIntrval := time.Duration(configs.StoreIntrval) * time.Second
+		metricsStorage.Run(configs.FileStoragePath, storeIntrval)
 	}
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
