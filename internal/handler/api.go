@@ -55,7 +55,7 @@ func ApiUpdateHandler(s Storage, configs config.ConfigServer) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
 		} else if m.Delta != nil {
-			if *m.Delta == int64(configs.StoreIntrval) && configs.StoreIntrval != 0 {
+			if *m.Delta%int64(configs.StoreIntrval) == 0 && configs.StoreIntrval != 0 {
 				err = s.SaveFile(configs.FileStoragePath)
 				if err != nil {
 					http.Error(w, err.Error(), http.StatusInternalServerError)

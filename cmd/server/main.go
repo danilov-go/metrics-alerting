@@ -16,7 +16,7 @@ func main() {
 			Host: "localhost",
 			Port: 8080,
 		},
-		StoreIntrval:    20,
+		StoreIntrval:    300,
 		FileStoragePath: "metricStorage.txt",
 		Restore:         true,
 	}
@@ -31,7 +31,7 @@ func main() {
 	if configs.Restore {
 		err := metricsStorage.LoadFile(configs.FileStoragePath)
 		if err != nil {
-			logger.Log.Error("не удалось восстановить метрики из файла", zap.Error(err))
+			logger.Log.Info("не удалось восстановить метрики из файла", zap.Error(err))
 		}
 	}
 	r := chi.NewRouter()

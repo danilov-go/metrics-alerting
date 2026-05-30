@@ -66,7 +66,7 @@ func (c *MemStorage) SaveFile(path string) error {
 	}
 	defer file.Close()
 	buf := bufio.NewWriter(file)
-	err = json.NewEncoder(buf).Encode(&c)
+	err = json.NewEncoder(buf).Encode(c)
 	if err != nil {
 		return err
 
@@ -81,7 +81,7 @@ func (c *MemStorage) LoadFile(path string) error {
 	}
 	defer file.Close()
 	buf := bufio.NewReader(file)
-	err = json.NewDecoder(buf).Decode(&c)
+	err = json.NewDecoder(buf).Decode(c)
 	if err != nil {
 		return err
 	}
