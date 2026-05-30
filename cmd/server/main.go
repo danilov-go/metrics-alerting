@@ -7,6 +7,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/danilov-go/metrics-alerting.git/internal/server"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -15,6 +16,9 @@ func main() {
 			Host: "localhost",
 			Port: 8080,
 		},
+		StoreIntrval:    20,
+		FileStoragePath: "metricStorage.txt",
+		Restore:         true,
 	}
 	configs.Get()
 	if err := logger.Initialize("info"); err != nil {
@@ -24,13 +28,19 @@ func main() {
 		Gauges:   make(map[string]float64),
 		Counters: make(map[string]int64),
 	}
+	if configs.Restore {
+		err := metricsStorage.LoadFile(configs.FileStoragePath)
+		if err != nil {
+			logger.Log.Error("не удалось восстановить метрики из файла", zap.Error(err))
+		}
+	}
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
 	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(metricsStorage))
 	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(metricsStorage))
-	r.Post("/update", handler.ApiUpdateHandler(metricsStorage))
-	r.Post("/update/", handler.ApiUpdateHandler(metricsStorage))
+	r.Post("/update", handler.ApiUpdateHandler(metricsStorage, configs))
+	r.Post("/update/", handler.ApiUpdateHandler(metricsStorage, configs))
 	r.Post("/value", handler.ApiValueHandler(metricsStorage))
 	r.Post("/value/", handler.ApiValueHandler(metricsStorage))
 	r.Get("/", handler.ExposeMetricsHandler(metricsStorage))

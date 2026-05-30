@@ -23,7 +23,10 @@ type ConfigAgent struct {
 }
 
 type ConfigServer struct {
-	Net NetAddress `env:"ADDRESS"`
+	Net             NetAddress `env:"ADDRESS"`
+	StoreIntrval    int        `env:"STORE_INTERVAL"`
+	FileStoragePath string     `env:"FILE_STORAGE_PATH"`
+	Restore         bool       `env:"RESTORE"`
 }
 
 func (n NetAddress) String() string {
@@ -50,6 +53,9 @@ func (n *NetAddress) Set(s string) error {
 func (s *ConfigServer) Get() {
 	f := flag.NewFlagSet("Run server", flag.ContinueOnError)
 	f.Var(&s.Net, "a", "Net address host:port")
+	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
+	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
+	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)

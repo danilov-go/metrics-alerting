@@ -7,10 +7,11 @@ import (
 
 	"net/http"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 )
 
-func ApiUpdateHandler(s Storage) http.HandlerFunc {
+func ApiUpdateHandler(s Storage, configs config.ConfigServer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m models.Metrics
 		var buf bytes.Buffer
@@ -33,12 +34,33 @@ func ApiUpdateHandler(s Storage) http.HandlerFunc {
 		}
 		switch m.MType {
 		case models.Gauge:
+			if m.Value == nil {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
 			s.SaveGauges(m.ID, *m.Value)
 		case models.Counter:
+			if m.Delta == nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
 			s.SaveCounters(m.ID, *m.Delta)
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
+		}
+		if configs.StoreIntrval == 0 {
+			err = s.SaveFile(configs.FileStoragePath)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		} else if m.Delta != nil {
+			if *m.Delta == int64(configs.StoreIntrval) && configs.StoreIntrval != 0 {
+				err = s.SaveFile(configs.FileStoragePath)
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
+			}
 		}
 		resp, err := json.Marshal(m)
 		if err != nil {
