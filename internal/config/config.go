@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/caarlos0/env/v6"
 )
 
 type NetAddress struct {
@@ -15,19 +17,25 @@ type NetAddress struct {
 }
 
 type ConfigAgent struct {
-	Net            NetAddress
-	PollInterval   int
-	ReportInterval int
+	Net            NetAddress `env:"ADDRESS"`
+	PollInterval   int        `env:"POLL_INTERVAL"`
+	ReportInterval int        `env:"REPORT_INTERVAL"`
 }
 
 type ConfigServer struct {
-	Net NetAddress
+	Net             NetAddress `env:"ADDRESS"`
+	StoreIntrval    int        `env:"STORE_INTERVAL"`
+	FileStoragePath string     `env:"FILE_STORAGE_PATH"`
+	Restore         bool       `env:"RESTORE"`
 }
 
 func (n NetAddress) String() string {
 	return n.Host + ":" + strconv.Itoa(n.Port)
 }
 
+func (n *NetAddress) UnmarshalText(adr []byte) error {
+	return n.Set(string(adr))
+}
 func (n *NetAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
 	if len(hp) != 2 {
@@ -45,7 +53,15 @@ func (n *NetAddress) Set(s string) error {
 func (s *ConfigServer) Get() {
 	f := flag.NewFlagSet("Run server", flag.ContinueOnError)
 	f.Var(&s.Net, "a", "Net address host:port")
+	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
+	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
+	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
 	err := f.Parse(os.Args[1:])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	err = env.Parse(s)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -58,6 +74,11 @@ func (a *ConfigAgent) Get() {
 	f.IntVar(&a.ReportInterval, "r", a.ReportInterval, "ReportInterval")
 	f.IntVar(&a.PollInterval, "p", a.PollInterval, "PollInterval")
 	err := f.Parse(os.Args[1:])
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	err = env.Parse(a)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -1,12 +1,16 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strconv"
 	"testing"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/logger"
+	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,22 +50,25 @@ func TestAgent_Run(t *testing.T) {
 	}
 	storage := make(map[string]bool)
 	r := chi.NewRouter()
-	r.Post("/update/{mType}/{mName}/{mVal}", func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "text/plain; charset=utf-8", r.Header.Get("Content-Type"))
-		mType := chi.URLParam(r, "mType")
-		mName := chi.URLParam(r, "mName")
-		mVal := chi.URLParam(r, "mVal")
-		storage[mName] = true
-		switch mType {
-		case "gauge":
-			_, err := strconv.ParseFloat(mVal, 64)
-			assert.NoError(t, err)
-		case "counter":
-			_, err := strconv.Atoi(mVal)
-			assert.NoError(t, err)
-			assert.Equal(t, "PollCount", mName)
+	r.Post("/update/", func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+		var m models.Metrics
+		var buf bytes.Buffer
+		wg, err := gzip.NewReader(r.Body)
+		assert.NoError(t, err)
+		_, err = buf.ReadFrom(wg)
+		assert.NoError(t, err)
+		err = json.Unmarshal(buf.Bytes(), &m)
+		assert.NoError(t, err)
+		storage[m.ID] = true
+		switch m.MType {
+		case models.Gauge:
+			assert.NotNil(t, m.Value)
+		case models.Counter:
+			assert.NotNil(t, m.Delta)
 		default:
-			t.Errorf("неизвестный тип метрики: %s", mType)
+			t.Errorf("неизвестный тип метрики: %s", m.MType)
 		}
 		w.WriteHeader(http.StatusOK)
 	})
@@ -69,7 +76,9 @@ func TestAgent_Run(t *testing.T) {
 	defer server.Close()
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	a := New(u.Host)
+	err = logger.Initialize("info")
+	require.NoError(t, err)
+	a := New(u.Host, logger.Log.Sugar())
 	var pollCount int64 = 4
 	step := 5
 	a.Run(&pollCount, int64(step))
