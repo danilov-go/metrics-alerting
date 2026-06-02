@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
+	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
 	"github.com/danilov-go/metrics-alerting.git/internal/logger"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
@@ -21,6 +22,7 @@ func main() {
 		StoreIntrval:    300,
 		FileStoragePath: "metricStorage.txt",
 		Restore:         true,
+		DatabaseDsn:     "host=localhost user=video password=123 dbname=video sslmode=disable",
 	}
 	configs.Get()
 	if err := logger.Initialize("info"); err != nil {
@@ -30,6 +32,12 @@ func main() {
 		Gauges:   make(map[string]float64),
 		Counters: make(map[string]int64),
 	}
+
+	err := db.InitDB(configs.DatabaseDsn)
+	if err != nil {
+		panic(err)
+	}
+	defer db.DB.Close()
 	if configs.Restore {
 		err := metricsStorage.LoadFile(configs.FileStoragePath)
 		if err != nil {
@@ -49,6 +57,7 @@ func main() {
 	r.Post("/update/", handler.ApiUpdateHandler(metricsStorage, configs))
 	r.Post("/value", handler.ApiValueHandler(metricsStorage))
 	r.Post("/value/", handler.ApiValueHandler(metricsStorage))
+	r.Get("/ping", handler.PingHandler(db.DB))
 	r.Get("/", handler.ExposeMetricsHandler(metricsStorage))
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {

@@ -27,6 +27,7 @@ type ConfigServer struct {
 	StoreIntrval    int        `env:"STORE_INTERVAL"`
 	FileStoragePath string     `env:"FILE_STORAGE_PATH"`
 	Restore         bool       `env:"RESTORE"`
+	DatabaseDsn     string     `env:"DATABASE_DSN"`
 }
 
 func (n NetAddress) String() string {
@@ -55,6 +56,7 @@ func (s *ConfigServer) Get() {
 	f.Var(&s.Net, "a", "Net address host:port")
 	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
 	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
+	f.StringVar(&s.DatabaseDsn, "d", s.DatabaseDsn, "DatabaseDsn")
 	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
