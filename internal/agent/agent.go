@@ -32,40 +32,36 @@ func New(port string, l log) *Agent {
 	}
 }
 
-func (a *Agent) Run(pollCount *int64, step int64) {
-	metrics := metricGet(pollCount)
-	if *pollCount != 0 && *pollCount%step == 0 {
-		for _, m := range metrics {
-			var buf bytes.Buffer
-			wg := gzip.NewWriter(&buf)
-			err := json.NewEncoder(wg).Encode(m)
-			wg.Close()
-			if err != nil {
-				a.Logger.Errorw("ошибка сжатия данных", "err", err)
-				continue
-			}
-			response, err := a.Client.R().
-				SetHeader("Content-Type", "application/json").
-				SetHeader("Content-Encoding", "gzip").
-				SetBody(buf.Bytes()).
-				Post("/update/")
-			if err != nil {
-				a.Logger.Errorw("ошибка формирования запроса", "err", err)
-				continue
-			}
-			if response.StatusCode() != http.StatusOK {
-				a.Logger.Errorw("статус запроса:", "status", response.StatusCode())
-				continue
-			}
+func (a *Agent) Run(metrics []models.Metrics) {
+	for _, m := range metrics {
+		var buf bytes.Buffer
+		wg := gzip.NewWriter(&buf)
+		err := json.NewEncoder(wg).Encode(m)
+		wg.Close()
+		if err != nil {
+			a.Logger.Errorw("ошибка сжатия данных", "err", err)
+			continue
+		}
+		response, err := a.Client.R().
+			SetHeader("Content-Type", "application/json").
+			SetHeader("Content-Encoding", "gzip").
+			SetBody(buf.Bytes()).
+			Post("/update/")
+		if err != nil {
+			a.Logger.Errorw("ошибка формирования запроса", "err", err)
+			continue
+		}
+		if response.StatusCode() != http.StatusOK {
+			a.Logger.Errorw("статус запроса:", "status", response.StatusCode())
+			continue
 		}
 	}
 }
 
-func metricGet(pollCount *int64) []models.Metrics {
+func (a *Agent) Get(pollCount int64) []models.Metrics {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	randomValue := rand.Float64()
-	*pollCount++
 	return []models.Metrics{
 		{ID: "Alloc", MType: models.Gauge, Value: models.PointerFloat64(float64(m.Alloc))},
 		{ID: "BuckHashSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.BuckHashSys))},
@@ -95,6 +91,6 @@ func metricGet(pollCount *int64) []models.Metrics {
 		{ID: "Sys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.Sys))},
 		{ID: "TotalAlloc", MType: models.Gauge, Value: models.PointerFloat64(float64(m.TotalAlloc))},
 		{ID: "RandomValue", MType: models.Gauge, Value: models.PointerFloat64(float64(randomValue))},
-		{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(*pollCount)},
+		{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(pollCount)},
 	}
 }

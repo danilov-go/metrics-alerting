@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync/atomic"
 	"testing"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/logger"
@@ -57,6 +58,7 @@ func TestAgent_Run(t *testing.T) {
 		var buf bytes.Buffer
 		wg, err := gzip.NewReader(r.Body)
 		assert.NoError(t, err)
+		defer wg.Close()
 		_, err = buf.ReadFrom(wg)
 		assert.NoError(t, err)
 		err = json.Unmarshal(buf.Bytes(), &m)
@@ -79,10 +81,12 @@ func TestAgent_Run(t *testing.T) {
 	err = logger.Initialize("info")
 	require.NoError(t, err)
 	a := New(u.Host, logger.Log.Sugar())
-	var pollCount int64 = 4
-	step := 5
-	a.Run(&pollCount, int64(step))
-	assert.Equal(t, int64(5), pollCount)
+	var pollCount atomic.Int64
+	pollCount.Store(4)
+	pollCount.Add(1)
+	metrics := a.Get(pollCount.Load())
+	a.Run(metrics)
+	assert.Equal(t, int64(5), pollCount.Load())
 	for _, v := range expMetric {
 		assert.Contains(t, storage, v)
 	}

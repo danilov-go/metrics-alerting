@@ -32,7 +32,6 @@ func main() {
 		Gauges:   make(map[string]float64),
 		Counters: make(map[string]int64),
 	}
-
 	err := db.InitDB(configs.DatabaseDsn)
 	if err != nil {
 		panic(err)
