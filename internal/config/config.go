@@ -28,6 +28,8 @@ type ConfigServer struct {
 	FileStoragePath string     `env:"FILE_STORAGE_PATH"`
 	Restore         bool       `env:"RESTORE"`
 	DatabaseDsn     string     `env:"DATABASE_DSN"`
+	ValidDB         bool
+	ValidFile       bool
 }
 
 func (n NetAddress) String() string {
@@ -63,10 +65,33 @@ func (s *ConfigServer) Get() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	f.Visit(func(fl *flag.Flag) {
+		switch fl.Name {
+		case "d":
+			if s.DatabaseDsn != "" {
+				s.ValidDB = true
+			}
+		case "f":
+			if s.FileStoragePath != "" {
+				s.ValidFile = true
+			}
+		case "r":
+			s.ValidFile = true
+		}
+	})
 	err = env.Parse(s)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+	dsn, envDb := os.LookupEnv("DATABASE_DSN")
+	if envDb == true && dsn != "" {
+		s.ValidDB = true
+	}
+	path, envPath := os.LookupEnv("FILE_STORAGE_PATH")
+	_, envRestore := os.LookupEnv("RESTORE")
+	if (envPath && path != "") || envRestore {
+		s.ValidFile = true
 	}
 }
 
