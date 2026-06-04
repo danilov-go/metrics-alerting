@@ -12,8 +12,23 @@ type storageDB struct {
 	DB *sql.DB
 }
 
+const schema = `
+CREATE TABLE IF NOT EXISTS metrics (
+    id VARCHAR(255) PRIMARY KEY,
+    mtype VARCHAR(255) NOT NULL,
+    delta BIGINT,
+    value DOUBLE PRECISION
+);
+
+CREATE INDEX IF NOT EXISTS idx_metrics_mtype ON metrics(mtype);
+`
+
 func InitDB(ps string) (*storageDB, error) {
 	db, err := sql.Open("pgx", ps)
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(schema)
 	if err != nil {
 		return nil, err
 	}
