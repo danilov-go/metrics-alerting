@@ -88,6 +88,7 @@ func (d *storageDB) GetCounters(name string) (int64, bool) {
 	}
 	return delta.Int64, true
 }
+
 func (d *storageDB) GetAllGauges() map[string]float64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -112,8 +113,8 @@ func (d *storageDB) GetAllGauges() map[string]float64 {
 		return nil
 	}
 	return gauges
-
 }
+
 func (d *storageDB) GetAllCounters() map[string]int64 {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()

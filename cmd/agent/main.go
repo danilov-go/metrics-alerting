@@ -43,6 +43,7 @@ func main() {
 			metrics = client.Get(pollCount.Load())
 		case <-tikerReport.C:
 			client.Run(metrics)
+			pollCount.Store(0)
 		}
 	}
 }
