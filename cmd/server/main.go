@@ -29,46 +29,38 @@ func main() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
-	metricsStorage := &repository.MemStorage{
-		Gauges:   make(map[string]float64),
-		Counters: make(map[string]int64),
-	}
 	configs.Get()
 	var sqlPg *sql.DB
-	Pg, err := db.InitDB(configs.DatabaseDsn)
-	if err != nil {
-		logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
-	} else {
-		sqlPg = Pg.DB
-	}
-	if sqlPg != nil {
-		defer sqlPg.Close()
+	cfg := repository.ConfigFile{
+		Path:     configs.FileStoragePath,
+		Interval: time.Duration(configs.StoreIntrval) * time.Second,
+		Restore:  configs.Restore,
 	}
 	switch {
-	case configs.ValidDB == true && err == nil:
-		storage = Pg
+	case configs.ValidDB == true:
+		Pg, err := db.InitDB(configs.DatabaseDsn, logger.Log.Sugar())
+		if err != nil {
+			logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
+			storage = repository.InitMemStorage(logger.Log.Sugar(), cfg)
+		} else {
+			storage = Pg
+			sqlPg = Pg.DB
+		}
+		if sqlPg != nil {
+			defer sqlPg.Close()
+		}
 	case configs.ValidFile == true:
-		if configs.Restore {
-			err := metricsStorage.LoadFile(configs.FileStoragePath)
-			if err != nil {
-				logger.Log.Info("не удалось восстановить метрики из файла", zap.Error(err))
-			}
-		}
-		if configs.StoreIntrval > 0 {
-			storeIntrval := time.Duration(configs.StoreIntrval) * time.Second
-			metricsStorage.Run(configs.FileStoragePath, storeIntrval)
-		}
-		storage = metricsStorage
+		storage = repository.InitMemStorage(logger.Log.Sugar(), cfg)
 	default:
-		storage = metricsStorage
+		storage = repository.InitMemStorage(logger.Log.Sugar(), cfg)
 	}
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
 	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(storage))
 	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(storage))
-	r.Post("/update", handler.ApiUpdateHandler(storage, configs))
-	r.Post("/update/", handler.ApiUpdateHandler(storage, configs))
+	r.Post("/update", handler.ApiUpdateHandler(storage))
+	r.Post("/update/", handler.ApiUpdateHandler(storage))
 	r.Post("/value", handler.ApiValueHandler(storage))
 	r.Post("/value/", handler.ApiValueHandler(storage))
 	r.Get("/ping", handler.PingHandler(sqlPg))

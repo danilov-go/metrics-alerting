@@ -7,11 +7,10 @@ import (
 
 	"net/http"
 
-	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 )
 
-func ApiUpdateHandler(s Storage, configs config.ConfigServer) http.HandlerFunc {
+func ApiUpdateHandler(s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m models.Metrics
 		var buf bytes.Buffer
@@ -48,12 +47,6 @@ func ApiUpdateHandler(s Storage, configs config.ConfigServer) http.HandlerFunc {
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
-		}
-		if configs.StoreIntrval == 0 {
-			err = s.SaveFile(configs.FileStoragePath)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
 		}
 		resp, err := json.Marshal(m)
 		if err != nil {

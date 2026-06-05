@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
@@ -102,13 +101,8 @@ func TestApiUpdateHandler(t *testing.T) {
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
 			}
-			testConfigs := config.ConfigServer{
-				StoreIntrval:    300,
-				FileStoragePath: "test.txt",
-				Restore:         false,
-			}
 			r := chi.NewRouter()
-			r.Post("/update", handler.ApiUpdateHandler(tt.storage, testConfigs))
+			r.Post("/update", handler.ApiUpdateHandler(tt.storage))
 			var body []byte
 			var err error
 			if tt.rawBody != "" {

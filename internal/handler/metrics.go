@@ -15,7 +15,6 @@ type Storage interface {
 	GetCounters(name string) (int64, bool)
 	GetAllGauges() map[string]float64
 	GetAllCounters() map[string]int64
-	SaveFile(path string) error
 }
 
 func PostMetricsHandler(s Storage) http.HandlerFunc {

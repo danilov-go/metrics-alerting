@@ -6,15 +6,45 @@ import (
 	"os"
 	"sync"
 	"time"
-
-	"github.com/danilov-go/metrics-alerting.git/internal/logger"
-	"go.uber.org/zap"
 )
+
+type log interface {
+	Errorw(msg string, keysAndValues ...any)
+	Infow(msg string, keysAndValues ...any)
+}
+type ConfigFile struct {
+	Path     string
+	Interval time.Duration
+	Restore  bool
+}
 
 type MemStorage struct {
 	Gauges   map[string]float64 `json:"gauges"`
 	Counters map[string]int64   `json:"counters"`
 	mu       sync.RWMutex       `json:"-"`
+	Logger   log                `json:"-"`
+	filePath string             `json:"-"`
+	interval time.Duration      `json:"-"`
+}
+
+func InitMemStorage(l log, cfg ConfigFile) *MemStorage {
+	m := &MemStorage{
+		Gauges:   make(map[string]float64),
+		Counters: make(map[string]int64),
+		Logger:   l,
+		filePath: cfg.Path,
+		interval: cfg.Interval,
+	}
+	if cfg.Path != "" && cfg.Restore {
+		err := m.loadFile(cfg.Path)
+		if err != nil {
+			l.Infow("не удалось восстановить метрики из файла", "err", err)
+		}
+	}
+	if cfg.Path != "" && cfg.Interval > 0 {
+		m.run()
+	}
+	return m
 }
 
 func (g *MemStorage) SaveGauges(name string, value float64) {
@@ -28,7 +58,6 @@ func (g *MemStorage) SaveGauges(name string, value float64) {
 
 func (c *MemStorage) SaveCounters(name string, value int64) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.Counters == nil {
 		c.Counters = make(map[string]int64)
 	}
@@ -36,6 +65,12 @@ func (c *MemStorage) SaveCounters(name string, value int64) {
 		c.Counters[name] = value + val
 	} else {
 		c.Counters[name] = value
+	}
+	c.mu.Unlock()
+	if c.interval == 0 {
+		if err := c.SaveFile(); err != nil {
+			c.Logger.Errorw("ошибка синхронной записи", "err", err)
+		}
 	}
 }
 
@@ -77,10 +112,13 @@ func (c *MemStorage) GetAllCounters() map[string]int64 {
 	return c.Counters
 }
 
-func (m *MemStorage) SaveFile(path string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+func (m *MemStorage) SaveFile() error {
+	if m.filePath == "" {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	file, err := os.OpenFile(m.filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
@@ -94,7 +132,7 @@ func (m *MemStorage) SaveFile(path string) error {
 	return buf.Flush()
 }
 
-func (m *MemStorage) LoadFile(path string) error {
+func (m *MemStorage) loadFile(path string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	file, err := os.OpenFile(path, os.O_RDONLY, 0666)
@@ -110,14 +148,14 @@ func (m *MemStorage) LoadFile(path string) error {
 	return nil
 }
 
-func (m *MemStorage) Run(path string, storeIntrval time.Duration) error {
-	ticker := time.NewTicker(storeIntrval)
+func (m *MemStorage) run() error {
+	ticker := time.NewTicker(m.interval)
 	go func(t *time.Ticker) {
 		defer t.Stop()
 		for range t.C {
-			err := m.SaveFile(path)
+			err := m.SaveFile()
 			if err != nil {
-				logger.Log.Info("ошибка записи в файл", zap.Error(err))
+				m.Logger.Infow("ошибка записи в файл", "err", err)
 			}
 		}
 	}(ticker)
