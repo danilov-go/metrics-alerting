@@ -51,26 +51,28 @@ func TestAgent_Run(t *testing.T) {
 	}
 	storage := make(map[string]bool)
 	r := chi.NewRouter()
-	r.Post("/update/", func(w http.ResponseWriter, r *http.Request) {
+	r.Post("/updates/", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
-		var m models.Metrics
+		var metric []models.Metrics
 		var buf bytes.Buffer
 		wg, err := gzip.NewReader(r.Body)
 		assert.NoError(t, err)
 		defer wg.Close()
 		_, err = buf.ReadFrom(wg)
 		assert.NoError(t, err)
-		err = json.Unmarshal(buf.Bytes(), &m)
+		err = json.Unmarshal(buf.Bytes(), &metric)
 		assert.NoError(t, err)
-		storage[m.ID] = true
-		switch m.MType {
-		case models.Gauge:
-			assert.NotNil(t, m.Value)
-		case models.Counter:
-			assert.NotNil(t, m.Delta)
-		default:
-			t.Errorf("неизвестный тип метрики: %s", m.MType)
+		for _, m := range metric {
+			storage[m.ID] = true
+			switch m.MType {
+			case models.Gauge:
+				assert.NotNil(t, m.Value)
+			case models.Counter:
+				assert.NotNil(t, m.Delta)
+			default:
+				t.Errorf("неизвестный тип метрики: %s", m.MType)
+			}
 		}
 		w.WriteHeader(http.StatusOK)
 	})

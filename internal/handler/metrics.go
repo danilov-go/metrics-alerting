@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -15,6 +16,7 @@ type Storage interface {
 	GetCounters(name string) (int64, bool)
 	GetAllGauges() map[string]float64
 	GetAllCounters() map[string]int64
+	SaveAll(metrics []models.Metrics) error
 }
 
 func PostMetricsHandler(s Storage) http.HandlerFunc {

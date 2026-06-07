@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -167,6 +168,53 @@ func (d *storageDB) GetAllCounters() map[string]int64 {
 	return counters
 }
 
-func (d *storageDB) SaveFile(path string) error {
+func (d *storageDB) SaveAll(metrics []models.Metrics) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	tx, err := d.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	queryCounter := `
+		INSERT INTO metrics (id, mtype, delta) VALUES ($1, 'counter', $2)
+		ON CONFLICT (id) 
+		DO UPDATE SET delta = metrics.delta + EXCLUDED.delta
+		`
+	stmtCounter, err := tx.PrepareContext(ctx, queryCounter)
+	if err != nil {
+		return err
+	}
+	defer stmtCounter.Close()
+	queryGauge := `
+		INSERT INTO metrics (id, mtype, value) VALUES ($1, 'gauge', $2)
+		ON CONFLICT (id) 
+		DO UPDATE SET value = EXCLUDED.value
+		`
+	stmtGauge, err := tx.PrepareContext(ctx, queryGauge)
+	if err != nil {
+		return err
+	}
+	defer stmtGauge.Close()
+	for _, m := range metrics {
+		switch m.MType {
+		case models.Counter:
+			_, err := stmtCounter.ExecContext(ctx, m.ID, m.Delta)
+			if err != nil {
+				d.Logger.Errorw("ошибка сохранения counter", err)
+				return err
+			}
+		case models.Gauge:
+			_, err := stmtGauge.ExecContext(ctx, m.ID, m.Value)
+			if err != nil {
+				d.Logger.Errorw("ошибка сохранения gauge", err)
+				return err
+			}
+		}
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
 	return nil
 }

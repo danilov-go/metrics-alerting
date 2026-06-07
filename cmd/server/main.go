@@ -59,6 +59,8 @@ func main() {
 	r.Use(handler.GzipMiddleware)
 	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(storage))
 	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(storage))
+	r.Post("/updates", handler.ApiUpdatesHandler(storage))
+	r.Post("/updates/", handler.ApiUpdatesHandler(storage))
 	r.Post("/update", handler.ApiUpdateHandler(storage))
 	r.Post("/update/", handler.ApiUpdateHandler(storage))
 	r.Post("/value", handler.ApiValueHandler(storage))

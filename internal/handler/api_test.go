@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
+	"github.com/danilov-go/metrics-alerting.git/internal/logger"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/go-chi/chi/v5"
@@ -97,14 +98,16 @@ func TestApiUpdateHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			err := logger.Initialize("info")
+			assert.NoError(t, err)
 			tt.storage = &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
+				Logger:   logger.Log.Sugar(),
 			}
 			r := chi.NewRouter()
 			r.Post("/update", handler.ApiUpdateHandler(tt.storage))
 			var body []byte
-			var err error
 			if tt.rawBody != "" {
 				body = []byte(tt.rawBody)
 			} else {
@@ -193,9 +196,12 @@ func TestApiValueHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			err := logger.Initialize("info")
+			assert.NoError(t, err)
 			storage := &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
+				Logger:   logger.Log.Sugar(),
 			}
 			if tt.expected.mName != "" {
 				switch tt.expected.mType {
@@ -226,6 +232,114 @@ func TestApiValueHandler(t *testing.T) {
 				case models.Gauge:
 					assert.NotNil(t, respMetrics.Value)
 					assert.Equal(t, tt.expected.valG, *respMetrics.Value)
+				}
+			}
+		})
+	}
+}
+
+func TestApiUpdatesHandler(t *testing.T) {
+	type metricExpected struct {
+		mType string
+		name  string
+		valG  float64
+		valC  int64
+	}
+	type want struct {
+		mExp metricExpected
+		code int
+	}
+
+	tests := []struct {
+		name     string
+		storage  *repository.MemStorage
+		m        models.Metrics
+		rawBody  string
+		expected want
+	}{
+		{
+			name: "положительный тест gauge",
+			m: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+				Value: models.PointerFloat64(123.45),
+			},
+			expected: want{
+				mExp: metricExpected{
+					mType: models.Gauge,
+					name:  "Alloc",
+					valG:  123.45,
+				},
+				code: http.StatusOK,
+			},
+		},
+		{
+			name: "положительный тест counter",
+			m: models.Metrics{
+				ID:    "PollCount",
+				MType: models.Counter,
+				Delta: models.PointerInt64(15),
+			},
+			expected: want{
+				mExp: metricExpected{
+					mType: models.Counter,
+					name:  "PollCount",
+					valC:  15,
+				},
+				code: http.StatusOK,
+			},
+		},
+		{
+			name: "неверный тип метрики",
+			m: models.Metrics{
+				ID:    "Alloc",
+				MType: "invalid_type",
+				Value: models.PointerFloat64(123.45),
+			},
+			expected: want{
+				code: http.StatusBadRequest,
+			},
+		},
+		{
+			name:    "некорректный JSON",
+			rawBody: "{error json}",
+			expected: want{
+				code: http.StatusBadRequest,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := logger.Initialize("info")
+			assert.NoError(t, err)
+			tt.storage = &repository.MemStorage{
+				Gauges:   make(map[string]float64),
+				Counters: make(map[string]int64),
+				Logger:   logger.Log.Sugar(),
+			}
+			r := chi.NewRouter()
+			r.Post("/updates", handler.ApiUpdatesHandler(tt.storage))
+			var body []byte
+			if tt.rawBody != "" {
+				body = []byte(tt.rawBody)
+			} else {
+				body, err = json.Marshal([]models.Metrics{tt.m})
+				assert.NoError(t, err)
+			}
+			buf := bytes.NewBuffer(body)
+			request := httptest.NewRequest(http.MethodPost, "/updates", buf)
+			request.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, request)
+			assert.Equal(t, tt.expected.code, w.Code)
+			if tt.expected.code == http.StatusOK {
+				switch tt.expected.mExp.mType {
+				case models.Counter:
+					assert.Contains(t, tt.storage.Counters, tt.expected.mExp.name)
+					assert.Equal(t, tt.expected.mExp.valC, tt.storage.Counters[tt.expected.mExp.name])
+				case models.Gauge:
+					assert.Contains(t, tt.storage.Gauges, tt.expected.mExp.name)
+					assert.Equal(t, tt.expected.mExp.valG, tt.storage.Gauges[tt.expected.mExp.name])
 				}
 			}
 		})

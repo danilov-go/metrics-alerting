@@ -3,9 +3,12 @@ package repository
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/danilov-go/metrics-alerting.git/internal/models"
 )
 
 type log interface {
@@ -159,5 +162,46 @@ func (m *MemStorage) run() error {
 			}
 		}
 	}(ticker)
+	return nil
+}
+
+func (m *MemStorage) SaveAll(metrics []models.Metrics) error {
+	m.mu.Lock()
+	for _, metric := range metrics {
+		switch metric.MType {
+		case models.Counter:
+			if metric.Delta == nil {
+				m.mu.Unlock()
+				return fmt.Errorf("переменная delta пустая")
+			}
+			if m.Counters == nil {
+				m.Counters = make(map[string]int64)
+			}
+			if val, ok := m.Counters[metric.ID]; ok {
+				m.Counters[metric.ID] = *metric.Delta + val
+			} else {
+				m.Counters[metric.ID] = *metric.Delta
+			}
+		case models.Gauge:
+			if metric.Value == nil {
+				m.mu.Unlock()
+				return fmt.Errorf("переменная value пустая")
+			}
+			if m.Gauges == nil {
+				m.Gauges = make(map[string]float64)
+			}
+			m.Gauges[metric.ID] = *metric.Value
+		default:
+			m.mu.Unlock()
+			return fmt.Errorf("неизвестный тип метрики")
+		}
+	}
+	m.mu.Unlock()
+	if m.interval == 0 {
+		if err := m.SaveFile(); err != nil {
+			m.Logger.Errorw("ошибка синхронной записи", "err", err)
+			return err
+		}
+	}
 	return nil
 }
