@@ -2,6 +2,7 @@ package repository
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -50,16 +51,17 @@ func InitMemStorage(l log, cfg ConfigFile) *MemStorage {
 	return m
 }
 
-func (g *MemStorage) SaveGauges(name string, value float64) {
+func (g *MemStorage) SaveGauges(ctx context.Context, name string, value float64) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.Gauges == nil {
 		g.Gauges = make(map[string]float64)
 	}
 	g.Gauges[name] = value
+	return nil
 }
 
-func (c *MemStorage) SaveCounters(name string, value int64) {
+func (c *MemStorage) SaveCounters(ctx context.Context, name string, value int64) error {
 	c.mu.Lock()
 	if c.Counters == nil {
 		c.Counters = make(map[string]int64)
@@ -73,46 +75,54 @@ func (c *MemStorage) SaveCounters(name string, value int64) {
 	if c.interval == 0 {
 		if err := c.SaveFile(); err != nil {
 			c.Logger.Errorw("ошибка синхронной записи", "err", err)
+			return err
 		}
 	}
+	return nil
 }
 
-func (g *MemStorage) GetGauges(name string) (float64, bool) {
+func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.Gauges == nil {
 		g.Gauges = make(map[string]float64)
 	}
 	val, ok := g.Gauges[name]
-	return val, ok
+	if !ok {
+		return 0, fmt.Errorf("метрики gauge отсутствуют")
+	}
+	return val, nil
 }
 
-func (c *MemStorage) GetCounters(name string) (int64, bool) {
+func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.Counters == nil {
 		c.Counters = make(map[string]int64)
 	}
 	val, ok := c.Counters[name]
-	return val, ok
+	if !ok {
+		return 0, fmt.Errorf("метрики counter отсутствуют")
+	}
+	return val, nil
 }
 
-func (g *MemStorage) GetAllGauges() map[string]float64 {
+func (g *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.Gauges == nil {
-		g.Gauges = make(map[string]float64)
+		return nil, fmt.Errorf("метрики gauge отсутствуют")
 	}
-	return g.Gauges
+	return g.Gauges, nil
 }
 
-func (c *MemStorage) GetAllCounters() map[string]int64 {
+func (c *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.Counters == nil {
-		c.Counters = make(map[string]int64)
+		return nil, fmt.Errorf("метрики counter отсутствуют")
 	}
-	return c.Counters
+	return c.Counters, nil
 }
 
 func (m *MemStorage) SaveFile() error {
@@ -165,7 +175,7 @@ func (m *MemStorage) run() error {
 	return nil
 }
 
-func (m *MemStorage) SaveAll(metrics []models.Metrics) error {
+func (m *MemStorage) SaveAll(ctx context.Context, metrics []models.Metrics) error {
 	m.mu.Lock()
 	for _, metric := range metrics {
 		switch metric.MType {

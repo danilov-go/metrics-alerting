@@ -1,25 +1,15 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
-type Storage interface {
-	SaveGauges(name string, value float64)
-	SaveCounters(name string, value int64)
-	GetGauges(name string) (float64, bool)
-	GetCounters(name string) (int64, bool)
-	GetAllGauges() map[string]float64
-	GetAllCounters() map[string]int64
-	SaveAll(metrics []models.Metrics) error
-}
-
-func PostMetricsHandler(s Storage) http.HandlerFunc {
+func PostMetricsHandler(ctx context.Context, s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mType := chi.URLParam(r, "mType")
 		mName := chi.URLParam(r, "mName")
@@ -35,7 +25,7 @@ func PostMetricsHandler(s Storage) http.HandlerFunc {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			s.SaveGauges(mName, valueMetric)
+			s.SaveGauges(ctx, mName, valueMetric)
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 		case "counter":
@@ -44,7 +34,7 @@ func PostMetricsHandler(s Storage) http.HandlerFunc {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			s.SaveCounters(mName, int64(valueMetric))
+			s.SaveCounters(ctx, mName, int64(valueMetric))
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -54,7 +44,7 @@ func PostMetricsHandler(s Storage) http.HandlerFunc {
 	}
 }
 
-func GetMetricHandler(s Storage) http.HandlerFunc {
+func GetMetricHandler(ctx context.Context, s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		mType := chi.URLParam(r, "mType")
 		mName := chi.URLParam(r, "mName")
@@ -64,8 +54,8 @@ func GetMetricHandler(s Storage) http.HandlerFunc {
 		}
 		switch mType {
 		case "gauge":
-			val, valid := s.GetGauges(mName)
-			if !valid {
+			val, err := s.GetGauges(ctx, mName)
+			if err != nil {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
@@ -73,8 +63,8 @@ func GetMetricHandler(s Storage) http.HandlerFunc {
 			w.WriteHeader(http.StatusOK)
 			fmt.Fprintf(w, "%v", val)
 		case "counter":
-			val, valid := s.GetCounters(mName)
-			if !valid {
+			val, err := s.GetCounters(ctx, mName)
+			if err != nil {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
@@ -88,10 +78,18 @@ func GetMetricHandler(s Storage) http.HandlerFunc {
 	}
 }
 
-func ExposeMetricsHandler(s Storage) http.HandlerFunc {
+func ExposeMetricsHandler(ctx context.Context, s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		mapGauge := s.GetAllGauges()
-		mapCounter := s.GetAllCounters()
+		mapGauge, err := s.GetAllGauges(ctx)
+		if err != nil {
+			http.Error(w, "ошибка получения gauge", http.StatusInternalServerError)
+			return
+		}
+		mapCounter, err := s.GetAllCounters(ctx)
+		if err != nil {
+			http.Error(w, "ошибка получения counter", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if len(mapGauge) == 0 && len(mapCounter) == 0 {
 			w.WriteHeader(http.StatusOK)

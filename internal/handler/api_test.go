@@ -106,7 +106,7 @@ func TestApiUpdateHandler(t *testing.T) {
 				Logger:   logger.Log.Sugar(),
 			}
 			r := chi.NewRouter()
-			r.Post("/update", handler.ApiUpdateHandler(tt.storage))
+			r.Post("/update", handler.ApiUpdateHandler(t.Context(), tt.storage))
 			var body []byte
 			if tt.rawBody != "" {
 				body = []byte(tt.rawBody)
@@ -206,13 +206,13 @@ func TestApiValueHandler(t *testing.T) {
 			if tt.expected.mName != "" {
 				switch tt.expected.mType {
 				case models.Counter:
-					storage.SaveCounters(tt.expected.mName, tt.expected.valC)
+					storage.SaveCounters(t.Context(), tt.expected.mName, tt.expected.valC)
 				case models.Gauge:
-					storage.SaveGauges(tt.expected.mName, tt.expected.valG)
+					storage.SaveGauges(t.Context(), tt.expected.mName, tt.expected.valG)
 				}
 			}
 			r := chi.NewRouter()
-			r.Post("/value", handler.ApiValueHandler(storage))
+			r.Post("/value", handler.ApiValueHandler(t.Context(), storage))
 			body, err := json.Marshal(tt.m)
 			assert.NoError(t, err)
 			buf := bytes.NewBuffer(body)
@@ -318,7 +318,7 @@ func TestApiUpdatesHandler(t *testing.T) {
 				Logger:   logger.Log.Sugar(),
 			}
 			r := chi.NewRouter()
-			r.Post("/updates", handler.ApiUpdatesHandler(tt.storage))
+			r.Post("/updates", handler.ApiUpdatesHandler(t.Context(), tt.storage))
 			var body []byte
 			if tt.rawBody != "" {
 				body = []byte(tt.rawBody)

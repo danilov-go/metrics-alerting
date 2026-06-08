@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 )
 
-func ApiUpdateHandler(s Storage) http.HandlerFunc {
+func ApiUpdateHandler(ctx context.Context, s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m models.Metrics
 		var buf bytes.Buffer
@@ -37,13 +38,13 @@ func ApiUpdateHandler(s Storage) http.HandlerFunc {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			s.SaveGauges(m.ID, *m.Value)
+			s.SaveGauges(ctx, m.ID, *m.Value)
 		case models.Counter:
 			if m.Delta == nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			s.SaveCounters(m.ID, *m.Delta)
+			s.SaveCounters(ctx, m.ID, *m.Delta)
 		default:
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -59,7 +60,7 @@ func ApiUpdateHandler(s Storage) http.HandlerFunc {
 	}
 }
 
-func ApiValueHandler(s Storage) http.HandlerFunc {
+func ApiValueHandler(ctx context.Context, s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m models.Metrics
 		var buf bytes.Buffer
@@ -82,15 +83,15 @@ func ApiValueHandler(s Storage) http.HandlerFunc {
 		}
 		switch m.MType {
 		case models.Gauge:
-			val, valid := s.GetGauges(m.ID)
-			if !valid {
+			val, err := s.GetGauges(ctx, m.ID)
+			if err != nil {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
 			m.Value = &val
 		case models.Counter:
-			val, valid := s.GetCounters(m.ID)
-			if !valid {
+			val, err := s.GetCounters(ctx, m.ID)
+			if err != nil {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
@@ -110,7 +111,7 @@ func ApiValueHandler(s Storage) http.HandlerFunc {
 	}
 }
 
-func ApiUpdatesHandler(s Storage) http.HandlerFunc {
+func ApiUpdatesHandler(ctx context.Context, s Storage) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var metrics []models.Metrics
 		var buf bytes.Buffer
@@ -127,7 +128,7 @@ func ApiUpdatesHandler(s Storage) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		err = s.SaveAll(metrics)
+		err = s.SaveAll(ctx, metrics)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

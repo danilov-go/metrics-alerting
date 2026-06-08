@@ -97,7 +97,7 @@ func TestPostMetricsHandler(t *testing.T) {
 				Counters: make(map[string]int64),
 			}
 			r := chi.NewRouter()
-			r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(tt.storage))
+			r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(t.Context(), tt.storage))
 			request := httptest.NewRequest(http.MethodPost, tt.url, nil)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
@@ -173,13 +173,13 @@ func TestGetMetricHandler(t *testing.T) {
 			if tt.mName != "" {
 				switch tt.mType {
 				case "counter":
-					storage.SaveCounters(tt.mName, tt.valC)
+					storage.SaveCounters(t.Context(), tt.mName, tt.valC)
 				case "gauge":
-					storage.SaveGauges(tt.mName, tt.valG)
+					storage.SaveGauges(t.Context(), tt.mName, tt.valG)
 				}
 			}
 			r := chi.NewRouter()
-			r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(storage))
+			r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(t.Context(), storage))
 			url := fmt.Sprintf("/value/%s/%s", tt.mType, tt.mName)
 			request := httptest.NewRequest(http.MethodGet, url, nil)
 			w := httptest.NewRecorder()
@@ -259,13 +259,13 @@ func TestExposeMetricHandler(t *testing.T) {
 			}
 			for _, name := range tt.mName {
 				if name == "PollCount" {
-					storage.SaveCounters(name, rand.Int64())
+					storage.SaveCounters(t.Context(), name, rand.Int64())
 				} else {
-					storage.SaveGauges(name, rand.Float64())
+					storage.SaveGauges(t.Context(), name, rand.Float64())
 				}
 			}
 			r := chi.NewRouter()
-			r.Get("/", handler.ExposeMetricsHandler(storage))
+			r.Get("/", handler.ExposeMetricsHandler(t.Context(), storage))
 			url := "/"
 			request := httptest.NewRequest(http.MethodGet, url, nil)
 			w := httptest.NewRecorder()

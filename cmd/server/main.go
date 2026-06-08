@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
 	var storage handler.Storage
 	configs := config.ConfigServer{
 		Net: config.NetAddress{
@@ -30,25 +32,23 @@ func main() {
 		panic(err)
 	}
 	configs.Get()
-	var sqlPg *sql.DB
 	cfg := repository.ConfigFile{
 		Path:     configs.FileStoragePath,
 		Interval: time.Duration(configs.StoreIntrval) * time.Second,
 		Restore:  configs.Restore,
 	}
+	var dbPing *sql.DB
+	Pg, err := db.InitDB(configs.DatabaseDsn, logger.Log.Sugar())
+	if err != nil {
+		logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
+	}
+	if Pg != nil {
+		dbPing = Pg.DB
+		defer Pg.DB.Close()
+	}
 	switch {
-	case configs.ValidDB == true:
-		Pg, err := db.InitDB(configs.DatabaseDsn, logger.Log.Sugar())
-		if err != nil {
-			logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
-			storage = repository.InitMemStorage(logger.Log.Sugar(), cfg)
-		} else {
-			storage = Pg
-			sqlPg = Pg.DB
-		}
-		if sqlPg != nil {
-			defer sqlPg.Close()
-		}
+	case configs.ValidDB == true && err == nil:
+		storage = handler.NewErrorMiddleware(Pg)
 	case configs.ValidFile == true:
 		storage = repository.InitMemStorage(logger.Log.Sugar(), cfg)
 	default:
@@ -57,16 +57,16 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
-	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(storage))
-	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(storage))
-	r.Post("/updates", handler.ApiUpdatesHandler(storage))
-	r.Post("/updates/", handler.ApiUpdatesHandler(storage))
-	r.Post("/update", handler.ApiUpdateHandler(storage))
-	r.Post("/update/", handler.ApiUpdateHandler(storage))
-	r.Post("/value", handler.ApiValueHandler(storage))
-	r.Post("/value/", handler.ApiValueHandler(storage))
-	r.Get("/ping", handler.PingHandler(sqlPg))
-	r.Get("/", handler.ExposeMetricsHandler(storage))
+	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(ctx, storage))
+	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(ctx, storage))
+	r.Post("/updates", handler.ApiUpdatesHandler(ctx, storage))
+	r.Post("/updates/", handler.ApiUpdatesHandler(ctx, storage))
+	r.Post("/update", handler.ApiUpdateHandler(ctx, storage))
+	r.Post("/update/", handler.ApiUpdateHandler(ctx, storage))
+	r.Post("/value", handler.ApiValueHandler(ctx, storage))
+	r.Post("/value/", handler.ApiValueHandler(ctx, storage))
+	r.Get("/ping", handler.PingHandler(dbPing))
+	r.Get("/", handler.ExposeMetricsHandler(ctx, storage))
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {
 		panic(err)
