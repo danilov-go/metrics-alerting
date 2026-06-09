@@ -10,6 +10,8 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -54,15 +56,27 @@ func InitDB(ps string, l log) (*storageDB, error) {
 func (d *storageDB) SaveCounters(ctx context.Context, name string, delta int64) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	query := `
-		INSERT INTO metrics (id, mtype, delta) VALUES ($1, 'counter', $2)
-		ON CONFLICT (id) 
-		DO UPDATE SET delta = metrics.delta + EXCLUDED.delta
-		`
-	_, err := d.DB.ExecContext(ctx, query, name, delta)
+	stmtInser, err := d.DB.PrepareContext(ctx, `INSERT INTO metrics (id, mtype, delta) VALUES ($1, 'counter', $2)`)
 	if err != nil {
-		d.Logger.Errorw("ошибка сохранения counter", err)
 		return err
+	}
+	defer stmtInser.Close()
+	stmtUpdate, err := d.DB.PrepareContext(ctx, `UPDATE metrics SET delta = metrics.delta + $1 WHERE id = $2`)
+	if err != nil {
+		return err
+	}
+	defer stmtUpdate.Close()
+	_, err = stmtInser.ExecContext(ctx, name, delta)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			if _, err := stmtUpdate.ExecContext(ctx, delta, name); err != nil {
+				d.Logger.Errorw("ошибка сохранения counter", err)
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	return nil
 }
@@ -70,15 +84,27 @@ func (d *storageDB) SaveCounters(ctx context.Context, name string, delta int64) 
 func (d *storageDB) SaveGauges(ctx context.Context, name string, value float64) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	query := `
-		INSERT INTO metrics (id, mtype, value) VALUES ($1, 'gauge', $2)
-		ON CONFLICT (id) 
-		DO UPDATE SET value = EXCLUDED.value
-		`
-	_, err := d.DB.ExecContext(ctx, query, name, value)
+	stmtInser, err := d.DB.PrepareContext(ctx, `INSERT INTO metrics (id, mtype, value) VALUES ($1, 'gauge', $2)`)
 	if err != nil {
-		d.Logger.Errorw("ошибка сохранения gauge", err)
 		return err
+	}
+	defer stmtInser.Close()
+	stmtUpdate, err := d.DB.PrepareContext(ctx, `UPDATE metrics SET value =$1 WHERE id = $2`)
+	if err != nil {
+		return err
+	}
+	defer stmtUpdate.Close()
+	_, err = stmtInser.ExecContext(ctx, name, value)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			if _, err := stmtUpdate.ExecContext(ctx, value, name); err != nil {
+				d.Logger.Errorw("ошибка сохранения counter", err)
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	return nil
 }
