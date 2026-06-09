@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"runtime"
 	"time"
@@ -48,13 +50,33 @@ func (a *Agent) Run(metrics []models.Metrics) {
 		a.Logger.Errorw("ошибка закрытия gzip writer", "err", err)
 		return
 	}
-	response, err := a.Client.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Content-Encoding", "gzip").
-		SetBody(buf.Bytes()).
-		Post("/updates/")
-	if err != nil {
-		a.Logger.Errorw("ошибка формирования запроса", "err", err)
+	const maxRetries = 3
+	duration := 1
+	var response *resty.Response
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		response, err = a.Client.R().
+			SetHeader("Content-Type", "application/json").
+			SetHeader("Content-Encoding", "gzip").
+			SetBody(buf.Bytes()).
+			Post("/updates/")
+		if err == nil {
+			break
+		}
+		if attempt == maxRetries {
+			a.Logger.Errorw("попытки отправки исчерпаны")
+			return
+		}
+		var netErr net.Error
+		if errors.As(err, &netErr) {
+			time.Sleep(time.Duration(duration) * time.Second)
+			duration += 2
+			continue
+		}
+		a.Logger.Errorw("ошибка при отправке", "err", err)
+		return
+	}
+	if response == nil {
+		a.Logger.Errorw("не удалось получить ответ от сервера")
 		return
 	}
 	if response.StatusCode() != http.StatusOK {
