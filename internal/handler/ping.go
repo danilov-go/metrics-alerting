@@ -1,22 +1,16 @@
 package handler
 
 import (
-	"context"
-	"database/sql"
 	"net/http"
-	"time"
 )
 
-func PingHandler(db *sql.DB) http.HandlerFunc {
+func (h *MetricsHandler) PingHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if db == nil {
-			http.Error(w, "база данных не была создана", http.StatusInternalServerError)
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
-		defer cancel()
-		if err := db.PingContext(ctx); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+		ctx := r.Context()
+		err := h.storage.Ping(ctx)
+		if err != nil {
+			h.logger.Errorw("ошибка при проверке соединения с базой данных", "error", err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
 		w.WriteHeader(http.StatusOK)

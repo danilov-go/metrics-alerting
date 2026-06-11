@@ -13,6 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type mockLogger struct{}
+
+func (m *mockLogger) Errorw(msg string, keysAndValues ...any) {}
+
 func TestPostMetricsHandler(t *testing.T) {
 	type metricExpected struct {
 		mType string
@@ -96,8 +100,9 @@ func TestPostMetricsHandler(t *testing.T) {
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
 			}
+			h := handler.NewMetricsHandler(tt.storage, &mockLogger{})
 			r := chi.NewRouter()
-			r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(t.Context(), tt.storage))
+			r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
 			request := httptest.NewRequest(http.MethodPost, tt.url, nil)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
@@ -178,8 +183,9 @@ func TestGetMetricHandler(t *testing.T) {
 					storage.SaveGauges(t.Context(), tt.mName, tt.valG)
 				}
 			}
+			h := handler.NewMetricsHandler(storage, &mockLogger{})
 			r := chi.NewRouter()
-			r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(t.Context(), storage))
+			r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
 			url := fmt.Sprintf("/value/%s/%s", tt.mType, tt.mName)
 			request := httptest.NewRequest(http.MethodGet, url, nil)
 			w := httptest.NewRecorder()
@@ -264,8 +270,9 @@ func TestExposeMetricHandler(t *testing.T) {
 					storage.SaveGauges(t.Context(), name, rand.Float64())
 				}
 			}
+			h := handler.NewMetricsHandler(storage, &mockLogger{})
 			r := chi.NewRouter()
-			r.Get("/", handler.ExposeMetricsHandler(t.Context(), storage))
+			r.Get("/", h.ExposeMetricsHandler())
 			url := "/"
 			request := httptest.NewRequest(http.MethodGet, url, nil)
 			w := httptest.NewRecorder()

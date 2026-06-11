@@ -103,10 +103,10 @@ func TestApiUpdateHandler(t *testing.T) {
 			tt.storage = &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
-				Logger:   logger.Log.Sugar(),
 			}
+			h := handler.NewMetricsHandler(tt.storage, &mockLogger{})
 			r := chi.NewRouter()
-			r.Post("/update", handler.ApiUpdateHandler(t.Context(), tt.storage))
+			r.Post("/update", h.ApiUpdateHandler())
 			var body []byte
 			if tt.rawBody != "" {
 				body = []byte(tt.rawBody)
@@ -201,7 +201,6 @@ func TestApiValueHandler(t *testing.T) {
 			storage := &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
-				Logger:   logger.Log.Sugar(),
 			}
 			if tt.expected.mName != "" {
 				switch tt.expected.mType {
@@ -211,8 +210,9 @@ func TestApiValueHandler(t *testing.T) {
 					storage.SaveGauges(t.Context(), tt.expected.mName, tt.expected.valG)
 				}
 			}
+			h := handler.NewMetricsHandler(storage, &mockLogger{})
 			r := chi.NewRouter()
-			r.Post("/value", handler.ApiValueHandler(t.Context(), storage))
+			r.Post("/value", h.ApiValueHandler())
 			body, err := json.Marshal(tt.m)
 			assert.NoError(t, err)
 			buf := bytes.NewBuffer(body)
@@ -315,10 +315,10 @@ func TestApiUpdatesHandler(t *testing.T) {
 			tt.storage = &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
-				Logger:   logger.Log.Sugar(),
 			}
+			h := handler.NewMetricsHandler(tt.storage, &mockLogger{})
 			r := chi.NewRouter()
-			r.Post("/updates", handler.ApiUpdatesHandler(t.Context(), tt.storage))
+			r.Post("/updates", h.ApiUpdatesHandler())
 			var body []byte
 			if tt.rawBody != "" {
 				body = []byte(tt.rawBody)

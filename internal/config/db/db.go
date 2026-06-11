@@ -4,27 +4,21 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-type log interface {
-	Errorw(msg string, keysAndValues ...any)
-}
-
 type storageDB struct {
-	DB     *sql.DB
-	Logger log
+	db *sql.DB
 }
 
-func InitDB(ps string, l log) (*storageDB, error) {
+func InitDB(ps string) (*storageDB, error) {
 	db, err := sql.Open("pgx", ps)
 	if err != nil {
 		return nil, err
@@ -48,35 +42,21 @@ func InitDB(ps string, l log) (*storageDB, error) {
 		return nil, err
 	}
 	return &storageDB{
-		DB:     db,
-		Logger: l,
+		db: db,
 	}, nil
 }
 
 func (d *storageDB) SaveCounters(ctx context.Context, name string, delta int64) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	stmtInser, err := d.DB.PrepareContext(ctx, `INSERT INTO metrics (id, mtype, delta) VALUES ($1, 'counter', $2)`)
+	query := `
+		INSERT INTO metrics (id, mtype, delta) VALUES ($1, 'counter', $2)
+		ON CONFLICT (id) 
+		DO UPDATE SET delta = metrics.delta + EXCLUDED.delta
+		`
+	_, err := d.db.ExecContext(ctx, query, name, delta)
 	if err != nil {
 		return err
-	}
-	defer stmtInser.Close()
-	stmtUpdate, err := d.DB.PrepareContext(ctx, `UPDATE metrics SET delta = metrics.delta + $1 WHERE id = $2`)
-	if err != nil {
-		return err
-	}
-	defer stmtUpdate.Close()
-	_, err = stmtInser.ExecContext(ctx, name, delta)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			if _, err := stmtUpdate.ExecContext(ctx, delta, name); err != nil {
-				d.Logger.Errorw("ошибка сохранения counter", err)
-				return err
-			}
-		} else {
-			return err
-		}
 	}
 	return nil
 }
@@ -84,27 +64,14 @@ func (d *storageDB) SaveCounters(ctx context.Context, name string, delta int64) 
 func (d *storageDB) SaveGauges(ctx context.Context, name string, value float64) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	stmtInser, err := d.DB.PrepareContext(ctx, `INSERT INTO metrics (id, mtype, value) VALUES ($1, 'gauge', $2)`)
+	query := `
+		INSERT INTO metrics (id, mtype, value) VALUES ($1, 'gauge', $2)
+		ON CONFLICT (id) 
+		DO UPDATE SET value = EXCLUDED.value
+		`
+	_, err := d.db.ExecContext(ctx, query, name, value)
 	if err != nil {
 		return err
-	}
-	defer stmtInser.Close()
-	stmtUpdate, err := d.DB.PrepareContext(ctx, `UPDATE metrics SET value =$1 WHERE id = $2`)
-	if err != nil {
-		return err
-	}
-	defer stmtUpdate.Close()
-	_, err = stmtInser.ExecContext(ctx, name, value)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			if _, err := stmtUpdate.ExecContext(ctx, value, name); err != nil {
-				d.Logger.Errorw("ошибка сохранения counter", err)
-				return err
-			}
-		} else {
-			return err
-		}
 	}
 	return nil
 }
@@ -114,7 +81,7 @@ func (d *storageDB) GetGauges(ctx context.Context, name string) (float64, error)
 	defer cancel()
 	query := `SELECT value FROM metrics WHERE mtype = 'gauge' AND id = $1`
 	var value sql.NullFloat64
-	row := d.DB.QueryRowContext(ctx, query, name)
+	row := d.db.QueryRowContext(ctx, query, name)
 	err := row.Scan(&value)
 	if err != nil {
 		return 0, err
@@ -130,7 +97,7 @@ func (d *storageDB) GetCounters(ctx context.Context, name string) (int64, error)
 	defer cancel()
 	query := `SELECT delta FROM metrics WHERE mtype = 'counter' AND id = $1`
 	var delta sql.NullInt64
-	row := d.DB.QueryRowContext(ctx, query, name)
+	row := d.db.QueryRowContext(ctx, query, name)
 	err := row.Scan(&delta)
 	if err != nil {
 		return 0, err
@@ -146,9 +113,8 @@ func (d *storageDB) GetAllGauges(ctx context.Context) (map[string]float64, error
 	defer cancel()
 	query := `SELECT id, value FROM metrics WHERE mtype = 'gauge'`
 	gauges := make(map[string]float64)
-	rows, err := d.DB.QueryContext(ctx, query)
+	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
-		d.Logger.Errorw("ошибка выполнения запроса", "err", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -157,17 +123,14 @@ func (d *storageDB) GetAllGauges(ctx context.Context) (map[string]float64, error
 		var value sql.NullFloat64
 		err := rows.Scan(&id, &value)
 		if err != nil {
-			d.Logger.Errorw("ошибка сканирования", "err", err)
 			return nil, err
 		}
 		if value.Valid {
 			gauges[id] = value.Float64
 		}
 	}
-
 	err = rows.Err()
 	if err != nil {
-		d.Logger.Errorw("ошибка чтения строк", "err", err)
 		return nil, err
 	}
 	return gauges, nil
@@ -178,7 +141,7 @@ func (d *storageDB) GetAllCounters(ctx context.Context) (map[string]int64, error
 	defer cancel()
 	query := `SELECT id, delta FROM metrics WHERE mtype = 'counter'`
 	counters := make(map[string]int64)
-	rows, err := d.DB.QueryContext(ctx, query)
+	rows, err := d.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +151,6 @@ func (d *storageDB) GetAllCounters(ctx context.Context) (map[string]int64, error
 		var delta sql.NullInt64
 		err := rows.Scan(&id, &delta)
 		if err != nil {
-			d.Logger.Errorw("ошибка сканирования", "err", err)
 			return nil, err
 		}
 		if delta.Valid {
@@ -197,7 +159,6 @@ func (d *storageDB) GetAllCounters(ctx context.Context) (map[string]int64, error
 	}
 	err = rows.Err()
 	if err != nil {
-		d.Logger.Errorw("ошибка чтения строк", "err", err)
 		return nil, err
 	}
 	return counters, nil
@@ -206,7 +167,7 @@ func (d *storageDB) GetAllCounters(ctx context.Context) (map[string]int64, error
 func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	tx, err := d.DB.Begin()
+	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -233,28 +194,31 @@ func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error
 		switch m.MType {
 		case models.Counter:
 			if m.Delta == nil {
-				d.Logger.Errorw("delta равна nil")
-				continue
+				return fmt.Errorf("delta равно nil")
 			}
 			_, err := stmtCounter.ExecContext(ctx, m.ID, *m.Delta)
 			if err != nil {
-				d.Logger.Errorw("ошибка сохранения counter", err)
 				return err
 			}
 		case models.Gauge:
 			if m.Value == nil {
-				d.Logger.Errorw("value равно nil")
-				continue
+				return fmt.Errorf("value равно nil")
 			}
 			_, err := stmtGauge.ExecContext(ctx, m.ID, *m.Value)
 			if err != nil {
-				d.Logger.Errorw("ошибка сохранения gauge", err)
 				return err
-
 			}
 		}
 	}
 	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *storageDB) Ping(ctx context.Context) error {
+	err := d.db.PingContext(ctx)
 	if err != nil {
 		return err
 	}

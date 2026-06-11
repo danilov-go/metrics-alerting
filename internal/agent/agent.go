@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"math/rand/v2"
@@ -21,7 +22,7 @@ type log interface {
 
 type Agent struct {
 	Client *resty.Client
-	Logger log
+	logger log
 }
 
 func New(port string, l log) *Agent {
@@ -30,30 +31,34 @@ func New(port string, l log) *Agent {
 	client.SetBaseURL("http://" + port)
 	return &Agent{
 		Client: client,
-		Logger: l,
+		logger: l,
 	}
 }
 
-func (a *Agent) Run(metrics []models.Metrics) {
+func (a *Agent) Run(ctx context.Context, metrics []models.Metrics) {
 	var buf bytes.Buffer
 	wg := gzip.NewWriter(&buf)
 	err := json.NewEncoder(wg).Encode(metrics)
 	if err != nil {
-		a.Logger.Errorw("ошибка сжатия данных", "err", err)
+		a.logger.Errorw("ошибка сжатия данных", "err", err)
 		if errClose := wg.Close(); errClose != nil {
-			a.Logger.Errorw("ошибка закрытия gzip writer", "err", errClose)
+			a.logger.Errorw("ошибка закрытия gzip writer", "error", errClose)
 		}
 		return
 	}
 	err = wg.Close()
 	if err != nil {
-		a.Logger.Errorw("ошибка закрытия gzip writer", "err", err)
+		a.logger.Errorw("ошибка закрытия gzip writer", "error", err)
 		return
 	}
 	const maxRetries = 3
 	duration := 1
 	var response *resty.Response
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := ctx.Err(); err != nil {
+			a.logger.Errorw("ошибка контекста", "error", err)
+			return
+		}
 		response, err = a.Client.R().
 			SetHeader("Content-Type", "application/json").
 			SetHeader("Content-Encoding", "gzip").
@@ -63,24 +68,29 @@ func (a *Agent) Run(metrics []models.Metrics) {
 			break
 		}
 		if attempt == maxRetries {
-			a.Logger.Errorw("попытки отправки исчерпаны")
+			a.logger.Errorw("попытки отправки исчерпаны", "maxRetries", maxRetries)
 			return
 		}
 		var netErr net.Error
 		if errors.As(err, &netErr) {
-			time.Sleep(time.Duration(duration) * time.Second)
+			timer := time.NewTimer(time.Duration(duration) * time.Second)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				ctx.Err()
+			case <-timer.C:
+			}
+			timer.Stop()
 			duration += 2
 			continue
 		}
-		a.Logger.Errorw("ошибка при отправке", "err", err)
-		return
 	}
 	if response == nil {
-		a.Logger.Errorw("не удалось получить ответ от сервера")
+		a.logger.Errorw("не удалось получить ответ от сервера", "error", err)
 		return
 	}
 	if response.StatusCode() != http.StatusOK {
-		a.Logger.Errorw("статус запроса:", "status", response.StatusCode())
+		a.logger.Errorw("статус запроса:", "status", response.StatusCode())
 		return
 	}
 }

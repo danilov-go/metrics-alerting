@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+type log interface {
+	Errorw(msg string, keysAndValues ...any)
+}
+
+type MetricsHandler struct {
+	storage Storage
+	logger  log
+}
+
+func NewMetricsHandler(storage Storage, l log) *MetricsHandler {
+	return &MetricsHandler{
+		storage: storage,
+		logger:  l,
+	}
+}
+
 type Storage interface {
 	SaveCounters(ctx context.Context, name string, delta int64) error
 	SaveGauges(ctx context.Context, name string, value float64) error
@@ -19,6 +35,7 @@ type Storage interface {
 	GetAllGauges(ctx context.Context) (map[string]float64, error)
 	GetAllCounters(ctx context.Context) (map[string]int64, error)
 	SaveAll(ctx context.Context, metrics []models.Metrics) error
+	Ping(ctx context.Context) error
 }
 
 type PGErrorClassification int
@@ -67,7 +84,7 @@ func NewErrorMiddleware(next Storage) *ErrorStorageMiddleware {
 	}
 }
 
-func (rm *ErrorStorageMiddleware) replay(_ context.Context, operation func() error) error {
+func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() error) error {
 	const maxRetries = 3
 	duration := 1
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -79,7 +96,14 @@ func (rm *ErrorStorageMiddleware) replay(_ context.Context, operation func() err
 			return fmt.Errorf("попытки подключения исчерпаны: %w", err)
 		}
 		if rm.classifier.Classify(err) == Retriable {
-			time.Sleep(time.Duration(duration) * time.Second)
+			timer := time.NewTimer(time.Duration(duration) * time.Second)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			case <-timer.C:
+			}
+			timer.Stop()
 			duration += 2
 			continue
 		}
@@ -149,6 +173,13 @@ func (rm *ErrorStorageMiddleware) GetAllCounters(ctx context.Context) (map[strin
 func (rm *ErrorStorageMiddleware) SaveAll(ctx context.Context, metrics []models.Metrics) error {
 	operation := func() error {
 		return rm.next.SaveAll(ctx, metrics)
+	}
+	return rm.replay(ctx, operation)
+}
+
+func (rm *ErrorStorageMiddleware) Ping(ctx context.Context) error {
+	operation := func() error {
+		return rm.next.Ping(ctx)
 	}
 	return rm.replay(ctx, operation)
 }

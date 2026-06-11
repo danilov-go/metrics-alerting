@@ -17,6 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockLogger struct{}
+
+func (m *mockLogger) Errorw(msg string, keysAndValues ...any) {}
+
 func TestAgent_Run(t *testing.T) {
 	expMetric := []string{
 		"Alloc",
@@ -82,12 +86,12 @@ func TestAgent_Run(t *testing.T) {
 	require.NoError(t, err)
 	err = logger.Initialize("info")
 	require.NoError(t, err)
-	a := New(u.Host, logger.Log.Sugar())
+	a := New(u.Host, &mockLogger{})
 	var pollCount atomic.Int64
 	pollCount.Store(4)
 	pollCount.Add(1)
 	metrics := a.Get(pollCount.Load())
-	a.Run(metrics)
+	a.Run(t.Context(), metrics)
 	assert.Equal(t, int64(5), pollCount.Load())
 	for _, v := range expMetric {
 		assert.Contains(t, storage, v)

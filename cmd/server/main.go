@@ -1,8 +1,6 @@
 package main
 
 import (
-	"context"
-	"database/sql"
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
@@ -16,7 +14,6 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
 	var storage handler.Storage
 	configs := config.ConfigServer{
 		Net: config.NetAddress{
@@ -37,36 +34,32 @@ func main() {
 		Interval: time.Duration(configs.StoreIntrval) * time.Second,
 		Restore:  configs.Restore,
 	}
-	var dbPing *sql.DB
-	Pg, err := db.InitDB(configs.DatabaseDsn, logger.Log.Sugar())
+	pg, err := db.InitDB(configs.DatabaseDsn)
 	if err != nil {
 		logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
 	}
-	if Pg != nil {
-		dbPing = Pg.DB
-		defer Pg.DB.Close()
-	}
 	switch {
 	case configs.ValidDB == true && err == nil:
-		storage = handler.NewErrorMiddleware(Pg)
+		storage = handler.NewErrorMiddleware(pg)
 	case configs.ValidFile == true:
-		storage = repository.InitMemStorage(logger.Log.Sugar(), cfg)
+		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	default:
-		storage = repository.InitMemStorage(logger.Log.Sugar(), cfg)
+		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
+	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
-	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(ctx, storage))
-	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(ctx, storage))
-	r.Post("/updates", handler.ApiUpdatesHandler(ctx, storage))
-	r.Post("/updates/", handler.ApiUpdatesHandler(ctx, storage))
-	r.Post("/update", handler.ApiUpdateHandler(ctx, storage))
-	r.Post("/update/", handler.ApiUpdateHandler(ctx, storage))
-	r.Post("/value", handler.ApiValueHandler(ctx, storage))
-	r.Post("/value/", handler.ApiValueHandler(ctx, storage))
-	r.Get("/ping", handler.PingHandler(dbPing))
-	r.Get("/", handler.ExposeMetricsHandler(ctx, storage))
+	r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
+	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
+	r.Post("/updates", h.ApiUpdatesHandler())
+	r.Post("/updates/", h.ApiUpdatesHandler())
+	r.Post("/update", h.ApiUpdateHandler())
+	r.Post("/update/", h.ApiUpdateHandler())
+	r.Post("/value", h.ApiValueHandler())
+	r.Post("/value/", h.ApiValueHandler())
+	r.Get("/ping", h.PingHandler())
+	r.Get("/", h.ExposeMetricsHandler())
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {
 		panic(err)
