@@ -84,7 +84,7 @@ func TestAgent_Run(t *testing.T) {
 	err = logger.Initialize("info")
 	require.NoError(t, err)
 	logger := zaptest.NewLogger(t)
-	a := New(u.Host, logger.Sugar())
+	a := New(u.Host, "", logger.Sugar())
 	var pollCount atomic.Int64
 	pollCount.Store(4)
 	pollCount.Add(1)

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
-	"github.com/danilov-go/metrics-alerting.git/internal/logger"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/go-chi/chi/v5"
@@ -99,8 +98,6 @@ func TestApiUpdateHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := logger.Initialize("info")
-			assert.NoError(t, err)
 			tt.storage = &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
@@ -110,6 +107,7 @@ func TestApiUpdateHandler(t *testing.T) {
 			r := chi.NewRouter()
 			r.Post("/update", h.ApiUpdateHandler())
 			var body []byte
+			var err error
 			if tt.rawBody != "" {
 				body = []byte(tt.rawBody)
 			} else {
@@ -198,8 +196,6 @@ func TestApiValueHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := logger.Initialize("info")
-			assert.NoError(t, err)
 			storage := &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
@@ -313,8 +309,6 @@ func TestApiUpdatesHandler(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := logger.Initialize("info")
-			assert.NoError(t, err)
 			tt.storage = &repository.MemStorage{
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
@@ -324,6 +318,7 @@ func TestApiUpdatesHandler(t *testing.T) {
 			r := chi.NewRouter()
 			r.Post("/updates", h.ApiUpdatesHandler())
 			var body []byte
+			var err error
 			if tt.rawBody != "" {
 				body = []byte(tt.rawBody)
 			} else {

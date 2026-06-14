@@ -19,6 +19,7 @@ func main() {
 		},
 		PollInterval:   2,
 		ReportInterval: 10,
+		Key:            "",
 	}
 	configs.Get()
 	if err := logger.Initialize("info"); err != nil {
@@ -30,7 +31,7 @@ func main() {
 	reportInterval := time.Duration(configs.ReportInterval) * time.Second
 	tikerPoll := time.NewTicker(pollInterval)
 	tikerReport := time.NewTicker(reportInterval)
-	client := agent.New(configs.Net.String(), logger.Log.Sugar())
+	client := agent.New(configs.Net.String(), configs.Key, logger.Log.Sugar())
 	var pollCount atomic.Int64
 	var metrics []models.Metrics
 	for {

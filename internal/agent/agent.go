@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math/rand/v2"
@@ -23,22 +26,35 @@ type log interface {
 type Agent struct {
 	Client *resty.Client
 	logger log
+	key    string
 }
 
-func New(port string, l log) *Agent {
+func New(port, key string, l log) *Agent {
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
 	client.SetBaseURL("http://" + port)
 	return &Agent{
 		Client: client,
 		logger: l,
+		key:    key,
 	}
 }
 
 func (a *Agent) Run(ctx context.Context, metrics []models.Metrics) {
+	jsonMetric, err := json.Marshal(metrics)
+	if err != nil {
+		a.logger.Errorw("ошибка сериализации", "err", err)
+		return
+	}
+	var hash string
+	if a.key != "" {
+		h := hmac.New(sha256.New, []byte(a.key))
+		h.Write(jsonMetric)
+		hash = hex.EncodeToString(h.Sum(nil))
+	}
 	var buf bytes.Buffer
 	wg := gzip.NewWriter(&buf)
-	err := json.NewEncoder(wg).Encode(metrics)
+	_, err = wg.Write(jsonMetric)
 	if err != nil {
 		a.logger.Errorw("ошибка сжатия данных", "err", err)
 		if errClose := wg.Close(); errClose != nil {
@@ -51,19 +67,19 @@ func (a *Agent) Run(ctx context.Context, metrics []models.Metrics) {
 		a.logger.Errorw("ошибка закрытия gzip writer", "error", err)
 		return
 	}
+	body := buf.Bytes()
 	const maxRetries = 3
 	duration := 1
 	var response *resty.Response
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if err := ctx.Err(); err != nil {
-			a.logger.Errorw("ошибка контекста", "error", err)
-			return
-		}
-		response, err = a.Client.R().
+		res := a.Client.R().
 			SetHeader("Content-Type", "application/json").
 			SetHeader("Content-Encoding", "gzip").
-			SetBody(buf.Bytes()).
-			Post("/updates/")
+			SetBody(body)
+		if a.key != "" {
+			res.SetHeader("HashSHA256", hash)
+		}
+		response, err = res.Post("/updates/")
 		if err == nil {
 			break
 		}
@@ -77,7 +93,7 @@ func (a *Agent) Run(ctx context.Context, metrics []models.Metrics) {
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				ctx.Err()
+				return
 			case <-timer.C:
 			}
 			timer.Stop()
