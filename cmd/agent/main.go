@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/agent"
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/logger"
+	"github.com/danilov-go/metrics-alerting.git/internal/models"
 )
 
 func main() {
@@ -21,13 +24,30 @@ func main() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	pollInterval := time.Duration(configs.PollInterval) * time.Second
 	reportInterval := time.Duration(configs.ReportInterval) * time.Second
-	step := int64(reportInterval / pollInterval)
+	tikerPoll := time.NewTicker(pollInterval)
+	tikerReport := time.NewTicker(reportInterval)
 	client := agent.New(configs.Net.String(), logger.Log.Sugar())
-	var pollCount int64 = 0
+	var pollCount atomic.Int64
+	var metrics []models.Metrics
 	for {
-		client.Run(&pollCount, step)
-		time.Sleep(pollInterval)
+		select {
+		case <-ctx.Done():
+			logger.Log.Info("получена команда на завершение")
+			return
+		case <-tikerPoll.C:
+			pollCount.Add(1)
+			metrics = client.Get(pollCount.Load())
+		case <-tikerReport.C:
+			if len(metrics) == 0 {
+				pollCount.Store(0)
+				continue
+			}
+			client.Run(ctx, metrics)
+			pollCount.Store(0)
+		}
 	}
 }

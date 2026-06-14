@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
+	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
 	"github.com/danilov-go/metrics-alerting.git/internal/logger"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
@@ -13,6 +14,7 @@ import (
 )
 
 func main() {
+	var storage handler.Storage
 	configs := config.ConfigServer{
 		Net: config.NetAddress{
 			Host: "localhost",
@@ -20,36 +22,44 @@ func main() {
 		},
 		StoreIntrval:    300,
 		FileStoragePath: "metricStorage.txt",
-		Restore:         true,
+		Restore:         false,
+		DatabaseDsn:     "host=localhost user=metrics password=123 dbname=metrics sslmode=disable",
 	}
-	configs.Get()
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
-	metricsStorage := &repository.MemStorage{
-		Gauges:   make(map[string]float64),
-		Counters: make(map[string]int64),
+	configs.Get()
+	cfg := repository.ConfigFile{
+		Path:     configs.FileStoragePath,
+		Interval: time.Duration(configs.StoreIntrval) * time.Second,
+		Restore:  configs.Restore,
 	}
-	if configs.Restore {
-		err := metricsStorage.LoadFile(configs.FileStoragePath)
-		if err != nil {
-			logger.Log.Info("не удалось восстановить метрики из файла", zap.Error(err))
-		}
+	pg, err := db.InitDB(configs.DatabaseDsn)
+	if err != nil {
+		logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
 	}
-	if configs.StoreIntrval > 0 {
-		storeIntrval := time.Duration(configs.StoreIntrval) * time.Second
-		metricsStorage.Run(configs.FileStoragePath, storeIntrval)
+	switch {
+	case configs.ValidDB == true && err == nil:
+		storage = handler.NewErrorMiddleware(pg)
+	case configs.ValidFile == true:
+		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
+	default:
+		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
+	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
-	r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(metricsStorage))
-	r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(metricsStorage))
-	r.Post("/update", handler.ApiUpdateHandler(metricsStorage, configs))
-	r.Post("/update/", handler.ApiUpdateHandler(metricsStorage, configs))
-	r.Post("/value", handler.ApiValueHandler(metricsStorage))
-	r.Post("/value/", handler.ApiValueHandler(metricsStorage))
-	r.Get("/", handler.ExposeMetricsHandler(metricsStorage))
+	r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
+	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
+	r.Post("/updates", h.ApiUpdatesHandler())
+	r.Post("/updates/", h.ApiUpdatesHandler())
+	r.Post("/update", h.ApiUpdateHandler())
+	r.Post("/update/", h.ApiUpdateHandler())
+	r.Post("/value", h.ApiValueHandler())
+	r.Post("/value/", h.ApiValueHandler())
+	r.Get("/ping", h.PingHandler())
+	r.Get("/", h.ExposeMetricsHandler())
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {
 		panic(err)

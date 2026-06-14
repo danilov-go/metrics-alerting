@@ -11,6 +11,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestPostMetricsHandler(t *testing.T) {
@@ -96,8 +97,10 @@ func TestPostMetricsHandler(t *testing.T) {
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
 			}
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Post("/update/{mType}/{mName}/{mVal}", handler.PostMetricsHandler(tt.storage))
+			r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
 			request := httptest.NewRequest(http.MethodPost, tt.url, nil)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
@@ -173,13 +176,15 @@ func TestGetMetricHandler(t *testing.T) {
 			if tt.mName != "" {
 				switch tt.mType {
 				case "counter":
-					storage.SaveCounters(tt.mName, tt.valC)
+					storage.SaveCounters(t.Context(), tt.mName, tt.valC)
 				case "gauge":
-					storage.SaveGauges(tt.mName, tt.valG)
+					storage.SaveGauges(t.Context(), tt.mName, tt.valG)
 				}
 			}
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Get("/value/{mType}/{mName}", handler.GetMetricHandler(storage))
+			r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
 			url := fmt.Sprintf("/value/%s/%s", tt.mType, tt.mName)
 			request := httptest.NewRequest(http.MethodGet, url, nil)
 			w := httptest.NewRecorder()
@@ -259,13 +264,15 @@ func TestExposeMetricHandler(t *testing.T) {
 			}
 			for _, name := range tt.mName {
 				if name == "PollCount" {
-					storage.SaveCounters(name, rand.Int64())
+					storage.SaveCounters(t.Context(), name, rand.Int64())
 				} else {
-					storage.SaveGauges(name, rand.Float64())
+					storage.SaveGauges(t.Context(), name, rand.Float64())
 				}
 			}
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Get("/", handler.ExposeMetricsHandler(storage))
+			r.Get("/", h.ExposeMetricsHandler())
 			url := "/"
 			request := httptest.NewRequest(http.MethodGet, url, nil)
 			w := httptest.NewRecorder()
