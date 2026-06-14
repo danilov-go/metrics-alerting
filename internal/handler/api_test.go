@@ -13,6 +13,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestApiUpdateHandler(t *testing.T) {
@@ -104,7 +105,8 @@ func TestApiUpdateHandler(t *testing.T) {
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
 			}
-			h := handler.NewMetricsHandler(tt.storage, &mockLogger{})
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
 			r.Post("/update", h.ApiUpdateHandler())
 			var body []byte
@@ -210,7 +212,8 @@ func TestApiValueHandler(t *testing.T) {
 					storage.SaveGauges(t.Context(), tt.expected.mName, tt.expected.valG)
 				}
 			}
-			h := handler.NewMetricsHandler(storage, &mockLogger{})
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(storage, logger.Sugar())
 			r := chi.NewRouter()
 			r.Post("/value", h.ApiValueHandler())
 			body, err := json.Marshal(tt.m)
@@ -316,7 +319,8 @@ func TestApiUpdatesHandler(t *testing.T) {
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
 			}
-			h := handler.NewMetricsHandler(tt.storage, &mockLogger{})
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
 			r.Post("/updates", h.ApiUpdatesHandler())
 			var body []byte

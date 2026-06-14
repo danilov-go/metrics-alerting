@@ -11,11 +11,8 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap/zaptest"
 )
-
-type mockLogger struct{}
-
-func (m *mockLogger) Errorw(msg string, keysAndValues ...any) {}
 
 func TestPostMetricsHandler(t *testing.T) {
 	type metricExpected struct {
@@ -100,7 +97,8 @@ func TestPostMetricsHandler(t *testing.T) {
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
 			}
-			h := handler.NewMetricsHandler(tt.storage, &mockLogger{})
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
 			r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
 			request := httptest.NewRequest(http.MethodPost, tt.url, nil)
@@ -183,7 +181,8 @@ func TestGetMetricHandler(t *testing.T) {
 					storage.SaveGauges(t.Context(), tt.mName, tt.valG)
 				}
 			}
-			h := handler.NewMetricsHandler(storage, &mockLogger{})
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(storage, logger.Sugar())
 			r := chi.NewRouter()
 			r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
 			url := fmt.Sprintf("/value/%s/%s", tt.mType, tt.mName)
@@ -270,7 +269,8 @@ func TestExposeMetricHandler(t *testing.T) {
 					storage.SaveGauges(t.Context(), name, rand.Float64())
 				}
 			}
-			h := handler.NewMetricsHandler(storage, &mockLogger{})
+			logger := zaptest.NewLogger(t)
+			h := handler.NewMetricsHandler(storage, logger.Sugar())
 			r := chi.NewRouter()
 			r.Get("/", h.ExposeMetricsHandler())
 			url := "/"

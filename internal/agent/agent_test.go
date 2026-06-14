@@ -15,11 +15,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 )
-
-type mockLogger struct{}
-
-func (m *mockLogger) Errorw(msg string, keysAndValues ...any) {}
 
 func TestAgent_Run(t *testing.T) {
 	expMetric := []string{
@@ -86,7 +83,8 @@ func TestAgent_Run(t *testing.T) {
 	require.NoError(t, err)
 	err = logger.Initialize("info")
 	require.NoError(t, err)
-	a := New(u.Host, &mockLogger{})
+	logger := zaptest.NewLogger(t)
+	a := New(u.Host, logger.Sugar())
 	var pollCount atomic.Int64
 	pollCount.Store(4)
 	pollCount.Add(1)

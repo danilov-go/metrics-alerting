@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"sync"
 	"time"
@@ -126,7 +126,7 @@ func (m *MemStorage) SaveAll(ctx context.Context, metrics []models.Metrics) erro
 		switch metric.MType {
 		case models.Counter:
 			if metric.Delta == nil {
-				return fmt.Errorf("переменная delta пустая")
+				return errors.New("переменная delta пустая")
 			}
 			if m.Counters == nil {
 				m.Counters = make(map[string]int64)
@@ -138,14 +138,14 @@ func (m *MemStorage) SaveAll(ctx context.Context, metrics []models.Metrics) erro
 			}
 		case models.Gauge:
 			if metric.Value == nil {
-				return fmt.Errorf("переменная value пустая")
+				return errors.New("переменная value пустая")
 			}
 			if m.Gauges == nil {
 				m.Gauges = make(map[string]float64)
 			}
 			m.Gauges[metric.ID] = *metric.Value
 		default:
-			return fmt.Errorf("неизвестный тип метрики")
+			return errors.New("неизвестный тип метрики")
 		}
 	}
 	if m.interval == 0 {
@@ -160,7 +160,7 @@ func (m *MemStorage) Ping(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return fmt.Errorf("ошибка подключения к БД")
+	return errors.New("ошибка подключения к БД")
 }
 
 func (m *MemStorage) SaveFile() error {
