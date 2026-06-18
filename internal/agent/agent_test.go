@@ -3,14 +3,18 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"sync/atomic"
+	"runtime"
+	"sync"
 	"testing"
+	"time"
 
-	"github.com/danilov-go/metrics-alerting.git/internal/logger"
+	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
@@ -49,8 +53,14 @@ func TestAgent_Run(t *testing.T) {
 		"TotalAlloc",
 		"RandomValue",
 		"PollCount",
+		"TotalMemory",
+		"FreeMemory",
 	}
-	storage := make(map[string]bool)
+	cores := runtime.NumCPU()
+	for i := 0; i < cores; i++ {
+		expMetric = append(expMetric, fmt.Sprintf("CPUutilization%d", i+1))
+	}
+	var storage sync.Map
 	r := chi.NewRouter()
 	r.Post("/updates/", func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
@@ -65,7 +75,7 @@ func TestAgent_Run(t *testing.T) {
 		err = json.Unmarshal(buf.Bytes(), &metric)
 		assert.NoError(t, err)
 		for _, m := range metric {
-			storage[m.ID] = true
+			storage.Store(m.ID, true)
 			switch m.MType {
 			case models.Gauge:
 				assert.NotNil(t, m.Value)
@@ -81,17 +91,29 @@ func TestAgent_Run(t *testing.T) {
 	defer server.Close()
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
-	err = logger.Initialize("info")
-	require.NoError(t, err)
 	logger := zaptest.NewLogger(t)
-	a := New(u.Host, "", logger.Sugar())
-	var pollCount atomic.Int64
-	pollCount.Store(4)
-	pollCount.Add(1)
-	metrics := a.Get(pollCount.Load())
-	a.Run(t.Context(), metrics)
-	assert.Equal(t, int64(5), pollCount.Load())
+	cfg := config.ConfigAgent{
+		Net: config.NetAddress{
+			Host: u.Hostname(),
+			Port: 8080,
+		},
+		RateLimit:      2,
+		PollInterval:   1,
+		ReportInterval: 1,
+		Key:            "",
+	}
+	a := New(cfg, logger.Sugar())
+	a.Client.SetBaseURL(server.URL)
+	a.Client.SetTimeout(5 * time.Second)
+	assert.NoError(t, err)
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(t.Context())
+	go a.Run(ctx)
+	time.Sleep(3 * time.Second)
+	cancel()
+	wg.Wait()
 	for _, v := range expMetric {
-		assert.Contains(t, storage, v)
+		_, ok := storage.Load(v)
+		assert.True(t, ok)
 	}
 }

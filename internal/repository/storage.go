@@ -82,8 +82,8 @@ func (c *MemStorage) SaveCounters(ctx context.Context, name string, value int64)
 }
 
 func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	if g.Gauges == nil {
 		g.Gauges = make(map[string]float64)
 	}
@@ -95,8 +95,8 @@ func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error
 }
 
 func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.Counters == nil {
 		c.Counters = make(map[string]int64)
 	}
@@ -108,14 +108,14 @@ func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error
 }
 
 func (g *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return g.Gauges, nil
 }
 
 func (c *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.Counters, nil
 }
 

@@ -1,20 +1,13 @@
 package agent
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"math/rand/v2"
-	"net"
-	"net/http"
-	"runtime"
+	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/go-resty/resty/v2"
 )
@@ -24,126 +17,138 @@ type log interface {
 }
 
 type Agent struct {
-	Client *resty.Client
-	logger log
-	key    string
+	Client         *resty.Client
+	logger         log
+	key            string
+	pollInterval   int
+	reportInterval int
+	rateLimit      int
+	pollCount      atomic.Int64
 }
 
-func New(port, key string, l log) *Agent {
+func New(cfg config.ConfigAgent, l log) *Agent {
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
-	client.SetBaseURL("http://" + port)
+	client.SetBaseURL("http://" + cfg.Net.String())
+	fmt.Println(cfg.Net.String())
 	return &Agent{
-		Client: client,
-		logger: l,
-		key:    key,
+		Client:         client,
+		logger:         l,
+		key:            cfg.Key,
+		pollInterval:   cfg.PollInterval,
+		reportInterval: cfg.ReportInterval,
+		rateLimit:      cfg.RateLimit,
 	}
 }
 
-func (a *Agent) Run(ctx context.Context, metrics []models.Metrics) {
-	jsonMetric, err := json.Marshal(metrics)
-	if err != nil {
-		a.logger.Errorw("ошибка сериализации", "err", err)
-		return
+func (a *Agent) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	gopsutilChan := a.getGopsutil(ctx, &wg)
+	runtimeChan := a.getRuntime(ctx, &wg)
+	metricChan := a.merge(ctx, &wg, gopsutilChan, runtimeChan)
+	a.worker(ctx, &wg, metricChan)
+	<-ctx.Done()
+	wg.Wait()
+}
+
+func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan []models.Metrics) {
+	for i := 0; i < a.rateLimit; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for ch := range metricsChan {
+				if len(ch) == 0 {
+					continue
+				}
+				a.send(ctx, ch)
+			}
+		}()
 	}
-	var hash string
-	if a.key != "" {
-		h := hmac.New(sha256.New, []byte(a.key))
-		h.Write(jsonMetric)
-		hash = hex.EncodeToString(h.Sum(nil))
-	}
-	var buf bytes.Buffer
-	wg := gzip.NewWriter(&buf)
-	_, err = wg.Write(jsonMetric)
-	if err != nil {
-		a.logger.Errorw("ошибка сжатия данных", "err", err)
-		if errClose := wg.Close(); errClose != nil {
-			a.logger.Errorw("ошибка закрытия gzip writer", "error", errClose)
-		}
-		return
-	}
-	err = wg.Close()
-	if err != nil {
-		a.logger.Errorw("ошибка закрытия gzip writer", "error", err)
-		return
-	}
-	body := buf.Bytes()
-	const maxRetries = 3
-	duration := 1
-	var response *resty.Response
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		res := a.Client.R().
-			SetHeader("Content-Type", "application/json").
-			SetHeader("Content-Encoding", "gzip").
-			SetBody(body)
-		if a.key != "" {
-			res.SetHeader("HashSHA256", hash)
-		}
-		response, err = res.Post("/updates/")
-		if err == nil {
-			break
-		}
-		if attempt == maxRetries {
-			a.logger.Errorw("попытки отправки исчерпаны", "maxRetries", maxRetries)
-			return
-		}
-		var netErr net.Error
-		if errors.As(err, &netErr) {
-			timer := time.NewTimer(time.Duration(duration) * time.Second)
+}
+
+func (a *Agent) merge(ctx context.Context, wg *sync.WaitGroup, gopsutilChan, runtimeChan chan []models.Metrics) chan []models.Metrics {
+	metricsChan := make(chan []models.Metrics, a.rateLimit)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		tikerReport := time.NewTicker(time.Duration(a.reportInterval) * time.Second)
+		defer tikerReport.Stop()
+		defer close(metricsChan)
+		var metrics []models.Metrics
+		for {
 			select {
 			case <-ctx.Done():
-				timer.Stop()
 				return
-			case <-timer.C:
+			case metric, ok := <-gopsutilChan:
+				if !ok {
+					gopsutilChan = nil
+					continue
+				}
+				metrics = append(metrics, metric...)
+			case metric, ok := <-runtimeChan:
+				if !ok {
+					runtimeChan = nil
+					continue
+				}
+				metrics = append(metrics, metric...)
+			case <-tikerReport.C:
+				if len(metrics) == 0 {
+					continue
+				}
+				metricsChan <- metrics
+				metrics = nil
 			}
-			timer.Stop()
-			duration += 2
-			continue
 		}
-	}
-	if response == nil {
-		a.logger.Errorw("не удалось получить ответ от сервера", "error", err)
-		return
-	}
-	if response.StatusCode() != http.StatusOK {
-		a.logger.Errorw("статус запроса:", "status", response.StatusCode())
-		return
-	}
+	}()
+	return metricsChan
 }
 
-func (a *Agent) Get(pollCount int64) []models.Metrics {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	randomValue := rand.Float64()
-	return []models.Metrics{
-		{ID: "Alloc", MType: models.Gauge, Value: models.PointerFloat64(float64(m.Alloc))},
-		{ID: "BuckHashSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.BuckHashSys))},
-		{ID: "Frees", MType: models.Gauge, Value: models.PointerFloat64(float64(m.Frees))},
-		{ID: "GCCPUFraction", MType: models.Gauge, Value: models.PointerFloat64(float64(m.GCCPUFraction))},
-		{ID: "GCSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.GCSys))},
-		{ID: "HeapAlloc", MType: models.Gauge, Value: models.PointerFloat64(float64(m.HeapAlloc))},
-		{ID: "HeapIdle", MType: models.Gauge, Value: models.PointerFloat64(float64(m.HeapIdle))},
-		{ID: "HeapInuse", MType: models.Gauge, Value: models.PointerFloat64(float64(m.HeapInuse))},
-		{ID: "HeapObjects", MType: models.Gauge, Value: models.PointerFloat64(float64(m.HeapObjects))},
-		{ID: "HeapReleased", MType: models.Gauge, Value: models.PointerFloat64(float64(m.HeapReleased))},
-		{ID: "HeapSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.HeapSys))},
-		{ID: "LastGC", MType: models.Gauge, Value: models.PointerFloat64(float64(m.LastGC))},
-		{ID: "Lookups", MType: models.Gauge, Value: models.PointerFloat64(float64(m.Lookups))},
-		{ID: "MCacheInuse", MType: models.Gauge, Value: models.PointerFloat64(float64(m.MCacheInuse))},
-		{ID: "MCacheSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.MCacheSys))},
-		{ID: "MSpanInuse", MType: models.Gauge, Value: models.PointerFloat64(float64(m.MSpanInuse))},
-		{ID: "MSpanSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.MSpanSys))},
-		{ID: "Mallocs", MType: models.Gauge, Value: models.PointerFloat64(float64(m.Mallocs))},
-		{ID: "NextGC", MType: models.Gauge, Value: models.PointerFloat64(float64(m.NextGC))},
-		{ID: "NumForcedGC", MType: models.Gauge, Value: models.PointerFloat64(float64(m.NumForcedGC))},
-		{ID: "NumGC", MType: models.Gauge, Value: models.PointerFloat64(float64(m.NumGC))},
-		{ID: "OtherSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.OtherSys))},
-		{ID: "PauseTotalNs", MType: models.Gauge, Value: models.PointerFloat64(float64(m.PauseTotalNs))},
-		{ID: "StackInuse", MType: models.Gauge, Value: models.PointerFloat64(float64(m.StackInuse))},
-		{ID: "StackSys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.StackSys))},
-		{ID: "Sys", MType: models.Gauge, Value: models.PointerFloat64(float64(m.Sys))},
-		{ID: "TotalAlloc", MType: models.Gauge, Value: models.PointerFloat64(float64(m.TotalAlloc))},
-		{ID: "RandomValue", MType: models.Gauge, Value: models.PointerFloat64(float64(randomValue))},
-		{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(pollCount)},
-	}
+func (a *Agent) getGopsutil(ctx context.Context, wg *sync.WaitGroup) chan []models.Metrics {
+	tikerPoll := time.NewTicker(time.Duration(a.pollInterval) * time.Second)
+	gopsutilChan := make(chan []models.Metrics, a.rateLimit)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer tikerPoll.Stop()
+		defer close(gopsutilChan)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tikerPoll.C:
+				metricsGopsutil, err := getGopsutil()
+				if err != nil {
+					a.logger.Errorw("ошибка сбора метрик", "error", err)
+				}
+				if len(metricsGopsutil) > 0 {
+					gopsutilChan <- metricsGopsutil
+				}
+			}
+		}
+	}()
+	return gopsutilChan
+}
+
+func (a *Agent) getRuntime(ctx context.Context, wg *sync.WaitGroup) chan []models.Metrics {
+	tikerPoll := time.NewTicker(time.Duration(a.pollInterval) * time.Second)
+	runtimeChan := make(chan []models.Metrics, a.rateLimit)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer tikerPoll.Stop()
+		defer close(runtimeChan)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tikerPoll.C:
+				a.pollCount.Add(1)
+				metricsRuntime := getRuntime(a.pollCount.Load())
+				if len(metricsRuntime) > 0 {
+					runtimeChan <- metricsRuntime
+				}
+			}
+		}
+	}()
+	return runtimeChan
 }

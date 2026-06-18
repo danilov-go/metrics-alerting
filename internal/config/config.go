@@ -21,6 +21,7 @@ type ConfigAgent struct {
 	PollInterval   int        `env:"POLL_INTERVAL"`
 	ReportInterval int        `env:"REPORT_INTERVAL"`
 	Key            string     `env:"KEY"`
+	RateLimit      int        `env:"RATE_LIMIT"`
 }
 
 type ConfigServer struct {
@@ -103,6 +104,7 @@ func (a *ConfigAgent) Get() {
 	f.Var(&a.Net, "a", "Net address host:port")
 	f.IntVar(&a.ReportInterval, "r", a.ReportInterval, "ReportInterval")
 	f.IntVar(&a.PollInterval, "p", a.PollInterval, "PollInterval")
+	f.IntVar(&a.RateLimit, "l", a.RateLimit, "RateLimit")
 	f.StringVar(&a.Key, "k", a.Key, "Key")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
