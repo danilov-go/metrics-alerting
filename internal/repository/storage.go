@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"sync"
 	"time"
@@ -110,13 +111,17 @@ func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error
 func (g *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	return g.Gauges, nil
+	gauges := make(map[string]float64, len(g.Gauges))
+	maps.Copy(gauges, g.Gauges)
+	return gauges, nil
 }
 
 func (c *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.Counters, nil
+	counters := make(map[string]int64, len(c.Counters))
+	maps.Copy(counters, c.Counters)
+	return counters, nil
 }
 
 func (m *MemStorage) SaveAll(ctx context.Context, metrics []models.Metrics) error {
