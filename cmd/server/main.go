@@ -47,6 +47,7 @@ func main() {
 	default:
 		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
+	logger.Log.Sugar().Info("Key", configs.Key)
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))

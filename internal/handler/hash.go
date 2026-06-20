@@ -39,7 +39,7 @@ func HashMiddleware(key string) func(http.Handler) http.Handler {
 			}
 			expHash := r.Header.Get("HashSHA256")
 			if expHash == "" {
-				h.ServeHTTP(w, r)
+				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
 			expectedHash, err := hex.DecodeString(expHash)

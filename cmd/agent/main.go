@@ -23,6 +23,7 @@ func main() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
+	logger.Log.Sugar().Info("Key", configs.Key)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := agent.New(*configs, logger.Log.Sugar())
