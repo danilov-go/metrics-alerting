@@ -20,6 +20,8 @@ type ConfigAgent struct {
 	Net            NetAddress `env:"ADDRESS"`
 	PollInterval   int        `env:"POLL_INTERVAL"`
 	ReportInterval int        `env:"REPORT_INTERVAL"`
+	Key            string     `env:"KEY"`
+	RateLimit      int        `env:"RATE_LIMIT"`
 }
 
 type ConfigServer struct {
@@ -28,6 +30,7 @@ type ConfigServer struct {
 	FileStoragePath string     `env:"FILE_STORAGE_PATH"`
 	Restore         bool       `env:"RESTORE"`
 	DatabaseDsn     string     `env:"DATABASE_DSN"`
+	Key             string     `env:"KEY"`
 	ValidDB         bool
 	ValidFile       bool
 }
@@ -59,6 +62,7 @@ func (s *ConfigServer) Get() {
 	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
 	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
 	f.StringVar(&s.DatabaseDsn, "d", s.DatabaseDsn, "DatabaseDsn")
+	f.StringVar(&s.Key, "k", s.Key, "Key")
 	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
@@ -100,6 +104,8 @@ func (a *ConfigAgent) Get() {
 	f.Var(&a.Net, "a", "Net address host:port")
 	f.IntVar(&a.ReportInterval, "r", a.ReportInterval, "ReportInterval")
 	f.IntVar(&a.PollInterval, "p", a.PollInterval, "PollInterval")
+	f.IntVar(&a.RateLimit, "l", a.RateLimit, "RateLimit")
+	f.StringVar(&a.Key, "k", a.Key, "Key")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)

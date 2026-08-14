@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"sync"
 	"time"
@@ -82,8 +83,8 @@ func (c *MemStorage) SaveCounters(ctx context.Context, name string, value int64)
 }
 
 func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	if g.Gauges == nil {
 		g.Gauges = make(map[string]float64)
 	}
@@ -95,8 +96,8 @@ func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error
 }
 
 func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.Counters == nil {
 		c.Counters = make(map[string]int64)
 	}
@@ -108,15 +109,19 @@ func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error
 }
 
 func (g *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.Gauges, nil
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	gauges := make(map[string]float64, len(g.Gauges))
+	maps.Copy(gauges, g.Gauges)
+	return gauges, nil
 }
 
 func (c *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.Counters, nil
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	counters := make(map[string]int64, len(c.Counters))
+	maps.Copy(counters, c.Counters)
+	return counters, nil
 }
 
 func (m *MemStorage) SaveAll(ctx context.Context, metrics []models.Metrics) error {

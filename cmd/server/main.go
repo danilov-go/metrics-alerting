@@ -24,6 +24,7 @@ func main() {
 		FileStoragePath: "metricStorage.txt",
 		Restore:         false,
 		DatabaseDsn:     "host=localhost user=metrics password=123 dbname=metrics sslmode=disable",
+		Key:             "",
 	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
@@ -46,10 +47,12 @@ func main() {
 	default:
 		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
+	logger.Log.Sugar().Info("Key", configs.Key)
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
+	r.Use(handler.HashMiddleware(configs.Key))
 	r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
 	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
 	r.Post("/updates", h.ApiUpdatesHandler())
