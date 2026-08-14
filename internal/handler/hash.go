@@ -39,6 +39,7 @@ func HashMiddleware(key string) func(http.Handler) http.Handler {
 			}
 			expHash := r.Header.Get("HashSHA256")
 			if expHash == "" {
+				w.Header().Set("Content-Type", "application/json")
 				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 				return
 			}
