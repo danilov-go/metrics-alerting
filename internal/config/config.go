@@ -31,8 +31,12 @@ type ConfigServer struct {
 	Restore         bool       `env:"RESTORE"`
 	DatabaseDsn     string     `env:"DATABASE_DSN"`
 	Key             string     `env:"KEY"`
+	AuditFile       string     `env:"AUDIT_FILE"`
+	AuditUrl        string     `env:"AUDIT_URL"`
 	ValidDB         bool
 	ValidFile       bool
+	ValidFileAudit  bool
+	ValidUrlAudit   bool
 }
 
 func (n NetAddress) String() string {
@@ -63,6 +67,8 @@ func (s *ConfigServer) Get() {
 	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
 	f.StringVar(&s.DatabaseDsn, "d", s.DatabaseDsn, "DatabaseDsn")
 	f.StringVar(&s.Key, "k", s.Key, "Key")
+	f.StringVar(&s.AuditFile, "audit-file", s.AuditFile, "AuditFile")
+	f.StringVar(&s.AuditUrl, "audit-url", s.AuditUrl, "AuditUrl")
 	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
@@ -81,6 +87,14 @@ func (s *ConfigServer) Get() {
 			}
 		case "r":
 			s.ValidFile = true
+		case "audit-file":
+			if s.AuditFile != "" {
+				s.ValidFileAudit = true
+			}
+		case "audit-url":
+			if s.AuditUrl != "" {
+				s.ValidUrlAudit = true
+			}
 		}
 	})
 	err = env.Parse(s)
@@ -96,6 +110,14 @@ func (s *ConfigServer) Get() {
 	_, envRestore := os.LookupEnv("RESTORE")
 	if (envPath && path != "") || envRestore {
 		s.ValidFile = true
+	}
+	pathAudit, envPathAudit := os.LookupEnv("AUDIT_FILE")
+	url, envUrl := os.LookupEnv("AUDIT_URL")
+	if envPathAudit && pathAudit != "" {
+		s.ValidFileAudit = true
+	}
+	if envUrl && url != "" {
+		s.ValidUrlAudit = true
 	}
 }
 
@@ -119,7 +141,6 @@ func (a *ConfigAgent) Get() {
 	if a.PollInterval == 0 {
 		fmt.Println("pollInterval не может быть нулем")
 		os.Exit(1)
-
 	}
 	if a.PollInterval > a.ReportInterval {
 		fmt.Println("pollInterval не может быть больше reportInterval")

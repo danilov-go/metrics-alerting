@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/audit"
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
@@ -10,6 +11,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/danilov-go/metrics-alerting.git/internal/server"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
 
@@ -25,6 +27,8 @@ func main() {
 		Restore:         false,
 		DatabaseDsn:     "host=localhost user=metrics password=123 dbname=metrics sslmode=disable",
 		Key:             "",
+		AuditFile:       "",
+		AuditUrl:        "",
 	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
@@ -48,21 +52,39 @@ func main() {
 		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
 	logger.Log.Sugar().Info("Key", configs.Key)
+	client := resty.New().SetTimeout(5 * time.Second)
+	event := audit.NewEvent(logger.Log.Sugar())
+	var validAudit bool
+	if configs.ValidFileAudit {
+		sub := audit.NewFileSubscriber(configs.AuditFile, logger.Log.Sugar())
+		event.Register(sub)
+		validAudit = true
+	}
+	if configs.ValidUrlAudit {
+		sub := audit.NewURLSubscriber(configs.AuditUrl, logger.Log.Sugar(), client)
+		event.Register(sub)
+		validAudit = true
+	}
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
 	r.Use(handler.HashMiddleware(configs.Key))
-	r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
 	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
-	r.Post("/updates", h.ApiUpdatesHandler())
-	r.Post("/updates/", h.ApiUpdatesHandler())
-	r.Post("/update", h.ApiUpdateHandler())
-	r.Post("/update/", h.ApiUpdateHandler())
 	r.Post("/value", h.ApiValueHandler())
 	r.Post("/value/", h.ApiValueHandler())
 	r.Get("/ping", h.PingHandler())
 	r.Get("/", h.ExposeMetricsHandler())
+	r.Group(func(r chi.Router) {
+		if validAudit {
+			r.Use(handler.AuditMiddleware(event))
+		}
+		r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
+		r.Post("/updates", h.ApiUpdatesHandler())
+		r.Post("/updates/", h.ApiUpdatesHandler())
+		r.Post("/update", h.ApiUpdateHandler())
+		r.Post("/update/", h.ApiUpdateHandler())
+	})
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {
 		panic(err)
