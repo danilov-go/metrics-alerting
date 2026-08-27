@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+	_ "net/http/pprof"
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/audit"
@@ -29,6 +31,8 @@ func main() {
 		Key:             "",
 		AuditFile:       "",
 		AuditUrl:        "",
+		RetryDuration:   1,
+		RetryInterval:   2,
 	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
@@ -45,7 +49,9 @@ func main() {
 	}
 	switch {
 	case configs.ValidDB == true && err == nil:
-		storage = handler.NewErrorMiddleware(pg)
+		duration := time.Duration(configs.RetryDuration) * time.Second
+		interval := time.Duration(configs.RetryInterval) * time.Second
+		storage = handler.NewErrorMiddleware(pg, duration, interval)
 	case configs.ValidFile == true:
 		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	default:
@@ -85,6 +91,11 @@ func main() {
 		r.Post("/update", h.ApiUpdateHandler())
 		r.Post("/update/", h.ApiUpdateHandler())
 	})
+	go func() {
+		if err := http.ListenAndServe(":8081", nil); err != nil {
+			logger.Log.Sugar().Errorw("ошибка запуска pprof сервера", "error", err)
+		}
+	}()
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {
 		panic(err)

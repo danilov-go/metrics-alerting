@@ -75,18 +75,22 @@ func classifyPgError(pgErr *pgconn.PgError) PGErrorClassification {
 type ErrorStorageMiddleware struct {
 	next       Storage
 	classifier *PostgresErrorClassifier
+	duration   time.Duration
+	interval   time.Duration
 }
 
-func NewErrorMiddleware(next Storage) *ErrorStorageMiddleware {
+func NewErrorMiddleware(next Storage, duration, interval time.Duration) *ErrorStorageMiddleware {
 	return &ErrorStorageMiddleware{
 		next:       next,
 		classifier: NewPostgresErrorClassifier(),
+		duration:   duration,
+		interval:   interval,
 	}
 }
 
 func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() error) error {
 	const maxRetries = 3
-	duration := 1
+	duration := rm.duration
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		err := operation()
 		if err == nil {
@@ -96,7 +100,7 @@ func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() e
 			return fmt.Errorf("попытки подключения исчерпаны: %w", err)
 		}
 		if rm.classifier.Classify(err) == Retriable {
-			timer := time.NewTimer(time.Duration(duration) * time.Second)
+			timer := time.NewTimer(duration)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
@@ -104,7 +108,7 @@ func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() e
 			case <-timer.C:
 			}
 			timer.Stop()
-			duration += 2
+			duration += rm.interval
 			continue
 		}
 		return err

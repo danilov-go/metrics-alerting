@@ -33,6 +33,8 @@ type ConfigServer struct {
 	Key             string     `env:"KEY"`
 	AuditFile       string     `env:"AUDIT_FILE"`
 	AuditUrl        string     `env:"AUDIT_URL"`
+	RetryDuration   int        `env:"RETRY_DURATION"`
+	RetryInterval   int        `env:"RETRY_INTERVAL"`
 	ValidDB         bool
 	ValidFile       bool
 	ValidFileAudit  bool
@@ -70,6 +72,8 @@ func (s *ConfigServer) Get() {
 	f.StringVar(&s.AuditFile, "audit-file", s.AuditFile, "AuditFile")
 	f.StringVar(&s.AuditUrl, "audit-url", s.AuditUrl, "AuditUrl")
 	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
+	f.IntVar(&s.RetryDuration, "retry-duration", s.RetryDuration, "RetryDuration")
+	f.IntVar(&s.RetryInterval, "retry-interval", s.RetryInterval, "RetryInterval")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)

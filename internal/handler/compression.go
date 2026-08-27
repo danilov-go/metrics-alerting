@@ -3,20 +3,28 @@ package handler
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"compress/gzip"
 	"io"
 )
+
+var poolGzip = sync.Pool{
+	New: func() interface{} {
+		w, _ := gzip.NewWriterLevel(io.Discard, gzip.BestSpeed)
+		return w
+	},
+}
 
 type compressWriter struct {
 	w  http.ResponseWriter
 	zw *gzip.Writer
 }
 
-func newCompressWriter(w http.ResponseWriter) *compressWriter {
+func newCompressWriter(w http.ResponseWriter, zw *gzip.Writer) *compressWriter {
 	return &compressWriter{
 		w:  w,
-		zw: gzip.NewWriter(w),
+		zw: zw,
 	}
 }
 
@@ -84,9 +92,14 @@ func GzipMiddleware(h http.Handler) http.Handler {
 		acceptEncoding := r.Header.Get("Accept-Encoding")
 		supportsGzip := strings.Contains(acceptEncoding, "gzip")
 		if supportsGzip {
-			cw := newCompressWriter(w)
+			zw := poolGzip.Get().(*gzip.Writer)
+			zw.Reset(w)
+			cw := newCompressWriter(w, zw)
 			ow = cw
-			defer cw.Close()
+			defer func() {
+				_ = cw.Close()
+				poolGzip.Put(zw)
+			}()
 		}
 		h.ServeHTTP(ow, r)
 	})

@@ -6,29 +6,37 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 
 	"net/http"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 )
 
+var pool = sync.Pool{
+	New: func() interface{} {
+		return new(bytes.Buffer)
+	},
+}
+
 func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
-		var buf bytes.Buffer
+		buf := pool.Get().(*bytes.Buffer)
+		buf.Reset()
+		defer pool.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		_, err := buf.ReadFrom(r.Body)
-		if err != nil {
+		if _, err := buf.ReadFrom(r.Body); err != nil {
 			h.logger.Errorw("ошибка чтения тела запроса", "error", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		if err = json.Unmarshal(buf.Bytes(), &m); err != nil {
+		if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
 			h.logger.Errorw("ошибка десериализации", "error", err)
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
@@ -45,7 +53,7 @@ func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 				http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 				return
 			}
-			err = h.storage.SaveGauges(ctx, m.ID, *m.Value)
+			err := h.storage.SaveGauges(ctx, m.ID, *m.Value)
 			if err != nil {
 				h.logger.Errorw("ошибка сохранения gauge", "error", err)
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -57,7 +65,7 @@ func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 				http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 				return
 			}
-			err = h.storage.SaveCounters(ctx, m.ID, *m.Delta)
+			err := h.storage.SaveCounters(ctx, m.ID, *m.Delta)
 			if err != nil {
 				h.logger.Errorw("ошибка сохранения counter", "error", err)
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -67,15 +75,14 @@ func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		resp, err := json.Marshal(m)
-		if err != nil {
-			h.logger.Errorw("ошибка сериализации ответа", "error", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(resp)
+		buf.Reset()
+		if err := json.NewEncoder(buf).Encode(m); err != nil {
+			h.logger.Errorw("ошибка сериализации", "error", err)
+			return
+		}
+		w.Write(buf.Bytes())
 	}
 }
 
@@ -83,19 +90,20 @@ func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
-		var buf bytes.Buffer
+		buf := pool.Get().(*bytes.Buffer)
+		buf.Reset()
+		defer pool.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		_, err := buf.ReadFrom(r.Body)
-		if err != nil {
+		if _, err := buf.ReadFrom(r.Body); err != nil {
 			h.logger.Errorw("ошибка чтения тела запроса", "error", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		if err = json.Unmarshal(buf.Bytes(), &m); err != nil {
+		if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
 			h.logger.Errorw("ошибка десериализации", "error", err)
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
@@ -136,15 +144,14 @@ func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		resp, err := json.Marshal(m)
-		if err != nil {
-			h.logger.Errorw("ошибка сериализации ответа", "error", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(resp)
+		buf.Reset()
+		if err := json.NewEncoder(buf).Encode(m); err != nil {
+			h.logger.Errorw("ошибка сериализации", "error", err)
+			return
+		}
+		w.Write(buf.Bytes())
 	}
 }
 
@@ -152,19 +159,20 @@ func (h *MetricsHandler) ApiUpdatesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var metrics []models.Metrics
-		var buf bytes.Buffer
+		buf := pool.Get().(*bytes.Buffer)
+		buf.Reset()
+		defer pool.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
 		}
-		_, err := buf.ReadFrom(r.Body)
-		if err != nil {
+		if _, err := buf.ReadFrom(r.Body); err != nil {
 			h.logger.Errorw("ошибка чтения тела запроса", "error", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		if err = json.Unmarshal(buf.Bytes(), &metrics); err != nil {
+		if err := json.Unmarshal(buf.Bytes(), &metrics); err != nil {
 			h.logger.Errorw("ошибка десериализации", "error", err)
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
@@ -176,20 +184,19 @@ func (h *MetricsHandler) ApiUpdatesHandler() http.HandlerFunc {
 				return
 			}
 		}
-		err = h.storage.SaveAll(ctx, metrics)
+		err := h.storage.SaveAll(ctx, metrics)
 		if err != nil {
 			h.logger.Errorw("ошибка сохранения", "error", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return
 		}
-		resp, err := json.Marshal(metrics)
-		if err != nil {
-			h.logger.Errorw("ошибка сериализации ответа", "error", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(resp)
+		buf.Reset()
+		if err := json.NewEncoder(buf).Encode(metrics); err != nil {
+			h.logger.Errorw("ошибка сериализации", "error", err)
+			return
+		}
+		w.Write(buf.Bytes())
 	}
 }
