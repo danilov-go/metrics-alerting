@@ -37,6 +37,7 @@ func (a *auditWriter) Write(b []byte) (int, error) {
 	return a.w.Write(b)
 }
 
+// AuditMiddleware отправляет успешные обновления метрик в адуит.
 func AuditMiddleware(event audit.Publisher) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

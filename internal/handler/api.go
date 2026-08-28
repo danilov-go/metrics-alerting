@@ -19,6 +19,7 @@ var pool = sync.Pool{
 	},
 }
 
+// ApiUpdateHandler возвращает обработчик для обновления или создания одиночной метрики из JSON.
 func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -86,6 +87,7 @@ func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 	}
 }
 
+// ApiValueHandler возвращает обработчик для получения текущего значения метрики по её типу и названию.
 func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -131,7 +133,7 @@ func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
 			val, err := h.storage.GetCounters(ctx, m.ID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
-					h.logger.Errorw("метрика gauge отсутствует в базе данных", "error", err)
+					h.logger.Errorw("метрика counter отсутствует в базе данных", "error", err)
 					http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
 					return
 				}
@@ -155,6 +157,7 @@ func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
 	}
 }
 
+// ApiUpdatesHandler возвращает обработчик для пакетного сохранения метрик.
 func (h *MetricsHandler) ApiUpdatesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

@@ -1,3 +1,4 @@
+// Package db реализует хранилище данных в базе PostgreSQL.
 package db
 
 import (
@@ -18,6 +19,7 @@ type storageDB struct {
 	db *sql.DB
 }
 
+// InitDB инициализирует подключение к базе данных PostgreSQL по переданной строке соединения.
 func InitDB(ps string) (*storageDB, error) {
 	db, err := sql.Open("pgx", ps)
 	if err != nil {
@@ -46,6 +48,7 @@ func InitDB(ps string) (*storageDB, error) {
 	}, nil
 }
 
+// SaveCounters сохраняет или обновляет метрику типа "counter".
 func (d *storageDB) SaveCounters(ctx context.Context, name string, delta int64) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -61,6 +64,7 @@ func (d *storageDB) SaveCounters(ctx context.Context, name string, delta int64) 
 	return nil
 }
 
+// SaveGauges сохраняет или перезаписывает метрику типа "gauge".
 func (d *storageDB) SaveGauges(ctx context.Context, name string, value float64) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -76,6 +80,7 @@ func (d *storageDB) SaveGauges(ctx context.Context, name string, value float64) 
 	return nil
 }
 
+// GetGauges возвращает значение метрики типа "gauge" по её названию.
 func (d *storageDB) GetGauges(ctx context.Context, name string) (float64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -92,6 +97,7 @@ func (d *storageDB) GetGauges(ctx context.Context, name string) (float64, error)
 	return value.Float64, nil
 }
 
+// GetCounters возвращает значение метрики типа "counter" по её названию.
 func (d *storageDB) GetCounters(ctx context.Context, name string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -108,6 +114,7 @@ func (d *storageDB) GetCounters(ctx context.Context, name string) (int64, error)
 	return delta.Int64, nil
 }
 
+// GetAllGauges возвращает map всех хранящихся метрик типа "gauge".
 func (d *storageDB) GetAllGauges(ctx context.Context) (map[string]float64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -136,6 +143,7 @@ func (d *storageDB) GetAllGauges(ctx context.Context) (map[string]float64, error
 	return gauges, nil
 }
 
+// GetAllCounters возвращает map всех хранящихся метрик типа "counter".
 func (d *storageDB) GetAllCounters(ctx context.Context) (map[string]int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -164,6 +172,7 @@ func (d *storageDB) GetAllCounters(ctx context.Context) (map[string]int64, error
 	return counters, nil
 }
 
+// SaveAll выполняет пакетное сохранение метрик в рамках одной транзакции.
 func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
@@ -217,6 +226,7 @@ func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error
 	return nil
 }
 
+// Ping проверяет доступность хранилища.
 func (d *storageDB) Ping(ctx context.Context) error {
 	err := d.db.PingContext(ctx)
 	if err != nil {

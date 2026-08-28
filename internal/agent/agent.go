@@ -1,3 +1,5 @@
+// Package agent собирает метрики runtime/gopsutil,
+// и с заданной периодичностью отправляет на сервер.
 package agent
 
 import (
@@ -16,6 +18,7 @@ type log interface {
 	Errorw(msg string, keysAndValues ...any)
 }
 
+// Agent собирает метрики runtime/gopsutil и передает их на сервер.
 type Agent struct {
 	Client         *resty.Client
 	logger         log
@@ -26,6 +29,7 @@ type Agent struct {
 	pollCount      atomic.Int64
 }
 
+// New создает новый экземпляр Agent.
 func New(cfg config.ConfigAgent, l log) *Agent {
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
@@ -41,6 +45,7 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 	}
 }
 
+// Run запускает процесс сбора и отправки метрик на сервер.
 func (a *Agent) Run(ctx context.Context) {
 	var wg sync.WaitGroup
 	gopsutilChan := a.getGopsutil(ctx, &wg)

@@ -75,6 +75,8 @@ func (c *compressReader) Close() error {
 	return c.zr.Close()
 }
 
+// GzipMiddleware распаковывает входящие запросы и сжимает
+// исходящие ответы сервера, если клиент поддерживает gzip.
 func GzipMiddleware(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ow := w
@@ -97,7 +99,7 @@ func GzipMiddleware(h http.Handler) http.Handler {
 			cw := newCompressWriter(w, zw)
 			ow = cw
 			defer func() {
-				_ = cw.Close()
+				cw.Close()
 				poolGzip.Put(zw)
 			}()
 		}

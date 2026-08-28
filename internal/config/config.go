@@ -1,3 +1,4 @@
+// Package config управляет конфигурацией приложения.
 package config
 
 import (
@@ -11,43 +12,69 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// NetAddress определяет адрес сервера.
 type NetAddress struct {
 	Host string
 	Port int
 }
 
+// ConfigAgent определяет конфигурацию агента.
 type ConfigAgent struct {
-	Net            NetAddress `env:"ADDRESS"`
-	PollInterval   int        `env:"POLL_INTERVAL"`
-	ReportInterval int        `env:"REPORT_INTERVAL"`
-	Key            string     `env:"KEY"`
-	RateLimit      int        `env:"RATE_LIMIT"`
+	// Net содержит сетевой адрес для запуска агента.
+	Net NetAddress `env:"ADDRESS"`
+	// PollInterval определяет интервал сбора метрик.
+	PollInterval int `env:"POLL_INTERVAL"`
+	// ReportInterval определяет интервал отправки метрик на сервер.
+	ReportInterval int `env:"REPORT_INTERVAL"`
+	// Key содержит ключ для подписи данных.
+	Key string `env:"KEY"`
+	// RateLimit ограничивает количество исходящих запросов.
+	RateLimit int `env:"RATE_LIMIT"`
 }
 
+// ConfigServer определяет конфигурацию сервера.
 type ConfigServer struct {
-	Net             NetAddress `env:"ADDRESS"`
-	StoreIntrval    int        `env:"STORE_INTERVAL"`
-	FileStoragePath string     `env:"FILE_STORAGE_PATH"`
-	Restore         bool       `env:"RESTORE"`
-	DatabaseDsn     string     `env:"DATABASE_DSN"`
-	Key             string     `env:"KEY"`
-	AuditFile       string     `env:"AUDIT_FILE"`
-	AuditUrl        string     `env:"AUDIT_URL"`
-	RetryDuration   int        `env:"RETRY_DURATION"`
-	RetryInterval   int        `env:"RETRY_INTERVAL"`
-	ValidDB         bool
-	ValidFile       bool
-	ValidFileAudit  bool
-	ValidUrlAudit   bool
+	// Net содержит сетевой адрес для запуска сервера.
+	Net NetAddress `env:"ADDRESS"`
+	// StoreInterval определяет интервал времени для сохранения метрик на диск.
+	StoreIntrval int `env:"STORE_INTERVAL"`
+	// FileStoragePath определяет путь к файлу, куда сохраняются метрики.
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	// Restore определяет, нужно ли загружать сохранённые метрики из файла при старте сервера.
+	Restore bool `env:"RESTORE"`
+	// DatabaseDsn содержит строку подключения к базе данных PostgreSQL.
+	DatabaseDsn string `env:"DATABASE_DSN"`
+	// Key содержит ключ для подписи данных.
+	Key string `env:"KEY"`
+	// AuditFile определяет путь к файлу логов аудита.
+	AuditFile string `env:"AUDIT_FILE"`
+	// AuditUrl содержит URL-адрес внешнего сервиса аудита.
+	AuditUrl string `env:"AUDIT_URL"`
+	// RetryDuration определяет продолжительность попыток повтора операций.
+	RetryDuration int `env:"RETRY_DURATION"`
+	// RetryInterval определяет интервал между повторными попытками выполнения операций.
+	RetryInterval int `env:"RETRY_INTERVAL"`
+	// ValidDB флаг, указывающий на корректность строки подключения к базе данных.
+	ValidDB bool
+	// ValidFile флаг, указывающий на корректность пути к файлу хранилища метрик.
+	ValidFile bool
+	// ValidFileAudit флаг, указывающий на корректность и доступность файла аудита.
+	ValidFileAudit bool
+	// ValidUrlAudit флаг, указывающий на корректность и доступность URL аудита.
+	ValidUrlAudit bool
 }
 
+// String возвращает строковое представление сетевого адреса в формате host:port.
 func (n NetAddress) String() string {
 	return n.Host + ":" + strconv.Itoa(n.Port)
 }
 
+// UnmarshalText десериализует сетевой адрес из текстового формата для библиотеки env.
 func (n *NetAddress) UnmarshalText(adr []byte) error {
 	return n.Set(string(adr))
 }
+
+// Set парсит строку в формате host:port и валидирует ее для пакета flag.
 func (n *NetAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
 	if len(hp) != 2 {
@@ -62,6 +89,7 @@ func (n *NetAddress) Set(s string) error {
 	return nil
 }
 
+// Get парсит конфигурацию сервера.
 func (s *ConfigServer) Get() {
 	f := flag.NewFlagSet("Run server", flag.ContinueOnError)
 	f.Var(&s.Net, "a", "Net address host:port")
@@ -125,6 +153,7 @@ func (s *ConfigServer) Get() {
 	}
 }
 
+// Get парсит конфигурацию агента.
 func (a *ConfigAgent) Get() {
 	f := flag.NewFlagSet("Run agent", flag.ContinueOnError)
 	f.Var(&a.Net, "a", "Net address host:port")
