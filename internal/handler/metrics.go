@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// PostMetricsHandler возвращает обработчик для создания или обновления метрики через URL-параметры.
 func (h *MetricsHandler) PostMetricsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -58,6 +59,7 @@ func (h *MetricsHandler) PostMetricsHandler() http.HandlerFunc {
 	}
 }
 
+// GetMetricHandler возвращает обработчик для получения текстового значения метрики по её типу и названию.
 func (h *MetricsHandler) GetMetricHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -96,6 +98,7 @@ func (h *MetricsHandler) GetMetricHandler() http.HandlerFunc {
 	}
 }
 
+// ExposeMetricsHandler возвращает HTML-страницу со списком сохраненных метрик.
 func (h *MetricsHandler) ExposeMetricsHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()

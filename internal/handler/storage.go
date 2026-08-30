@@ -1,3 +1,4 @@
+// Package handler реализует HTTP-интерфейс приложения.
 package handler
 
 import (
@@ -15,11 +16,13 @@ type log interface {
 	Errorw(msg string, keysAndValues ...any)
 }
 
+// MetricsHandler связывает HTTP-запросов с хранилищем данных.
 type MetricsHandler struct {
 	storage Storage
 	logger  log
 }
 
+// NewMetricsHandler создает новый экземпляр Handler.
 func NewMetricsHandler(storage Storage, l log) *MetricsHandler {
 	return &MetricsHandler{
 		storage: storage,
@@ -27,6 +30,7 @@ func NewMetricsHandler(storage Storage, l log) *MetricsHandler {
 	}
 }
 
+// Storage определяет методы для взаимодействия с хранилищем.
 type Storage interface {
 	SaveCounters(ctx context.Context, name string, delta int64) error
 	SaveGauges(ctx context.Context, name string, value float64) error
@@ -38,19 +42,25 @@ type Storage interface {
 	Ping(ctx context.Context) error
 }
 
+// PGErrorClassification определяет категорию ошибки базы данных для повторных попыток выполнения.
 type PGErrorClassification int
 
 const (
+	// NonRetriable определяет ошибку, которую нельзя исправить повторным запросом.
 	NonRetriable PGErrorClassification = iota
+	// Retriable определяет временную ошибку подключения, которую можно повторить.
 	Retriable
 )
 
+// PostgresErrorClassifier проверяет типы ошибок PostgreSQL на возможность повтора операции.
 type PostgresErrorClassifier struct{}
 
+// NewPostgresErrorClassifier создает новый экземпляр классификатора ошибок.
 func NewPostgresErrorClassifier() *PostgresErrorClassifier {
 	return &PostgresErrorClassifier{}
 }
 
+// Classify классифицирует ошибку для определения возможности повторных попыток.
 func (c *PostgresErrorClassifier) Classify(err error) PGErrorClassification {
 	if err == nil {
 		return NonRetriable
@@ -68,25 +78,37 @@ func classifyPgError(pgErr *pgconn.PgError) PGErrorClassification {
 		pgerrcode.ConnectionDoesNotExist,
 		pgerrcode.ConnectionFailure:
 		return Retriable
+	case pgerrcode.SerializationFailure,
+		pgerrcode.DeadlockDetected:
+		return Retriable
+	case pgerrcode.AdminShutdown,
+		pgerrcode.TooManyConnections:
+		return Retriable
 	}
 	return NonRetriable
 }
 
+// ErrorStorageMiddleware реализует механизма повторных попыток при сетевых сбоях.
 type ErrorStorageMiddleware struct {
 	next       Storage
 	classifier *PostgresErrorClassifier
+	duration   time.Duration
+	interval   time.Duration
 }
 
-func NewErrorMiddleware(next Storage) *ErrorStorageMiddleware {
+// NewErrorMiddleware создает новый экземпляр ErrorStorageMiddleware.
+func NewErrorMiddleware(next Storage, duration, interval time.Duration) *ErrorStorageMiddleware {
 	return &ErrorStorageMiddleware{
 		next:       next,
 		classifier: NewPostgresErrorClassifier(),
+		duration:   duration,
+		interval:   interval,
 	}
 }
 
 func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() error) error {
 	const maxRetries = 3
-	duration := 1
+	duration := rm.duration
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		err := operation()
 		if err == nil {
@@ -96,7 +118,7 @@ func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() e
 			return fmt.Errorf("попытки подключения исчерпаны: %w", err)
 		}
 		if rm.classifier.Classify(err) == Retriable {
-			timer := time.NewTimer(time.Duration(duration) * time.Second)
+			timer := time.NewTimer(duration)
 			select {
 			case <-ctx.Done():
 				timer.Stop()
@@ -104,7 +126,7 @@ func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() e
 			case <-timer.C:
 			}
 			timer.Stop()
-			duration += 2
+			duration += rm.interval
 			continue
 		}
 		return err
@@ -112,6 +134,7 @@ func (rm *ErrorStorageMiddleware) replay(ctx context.Context, operation func() e
 	return nil
 }
 
+// SaveCounters оборачивает вызов SaveCounters базы данных с поддержкой повторных попыток.
 func (rm *ErrorStorageMiddleware) SaveCounters(ctx context.Context, name string, delta int64) error {
 	operation := func() error {
 		return rm.next.SaveCounters(ctx, name, delta)
@@ -119,6 +142,7 @@ func (rm *ErrorStorageMiddleware) SaveCounters(ctx context.Context, name string,
 	return rm.replay(ctx, operation)
 }
 
+// SaveGauges оборачивает вызов SaveGauges базы данных с поддержкой повторных попыток.
 func (rm *ErrorStorageMiddleware) SaveGauges(ctx context.Context, name string, value float64) error {
 	operation := func() error {
 		return rm.next.SaveGauges(ctx, name, value)
@@ -126,6 +150,7 @@ func (rm *ErrorStorageMiddleware) SaveGauges(ctx context.Context, name string, v
 	return rm.replay(ctx, operation)
 }
 
+// GetGauges возвращает значение метрики типа "gauge" из базы данных с поддержкой повторных попыток.
 func (rm *ErrorStorageMiddleware) GetGauges(ctx context.Context, name string) (float64, error) {
 	var value float64
 	operation := func() error {
@@ -137,6 +162,7 @@ func (rm *ErrorStorageMiddleware) GetGauges(ctx context.Context, name string) (f
 	return value, err
 }
 
+// GetCounters возвращает значение метрики типа "counter" из базы данных с поддержкой повторных попыток.
 func (rm *ErrorStorageMiddleware) GetCounters(ctx context.Context, name string) (int64, error) {
 	var delta int64
 	operation := func() error {
@@ -148,6 +174,7 @@ func (rm *ErrorStorageMiddleware) GetCounters(ctx context.Context, name string) 
 	return delta, err
 }
 
+// GetAllGauges возвращает все метрики типа "gauge" из базы данных с поддержкой повторных попыток.
 func (rm *ErrorStorageMiddleware) GetAllGauges(ctx context.Context) (map[string]float64, error) {
 	var gauges map[string]float64
 	operation := func() error {
@@ -159,6 +186,7 @@ func (rm *ErrorStorageMiddleware) GetAllGauges(ctx context.Context) (map[string]
 	return gauges, err
 }
 
+// GetAllCounters возвращает все метрики типа "counter" из базы данных с поддержкой повторных попыток.
 func (rm *ErrorStorageMiddleware) GetAllCounters(ctx context.Context) (map[string]int64, error) {
 	var counters map[string]int64
 	operation := func() error {
@@ -170,6 +198,7 @@ func (rm *ErrorStorageMiddleware) GetAllCounters(ctx context.Context) (map[strin
 	return counters, err
 }
 
+// SaveAll сохраняет пакет метрик в базу данных с поддержкой повторных попыток.
 func (rm *ErrorStorageMiddleware) SaveAll(ctx context.Context, metrics []models.Metrics) error {
 	operation := func() error {
 		return rm.next.SaveAll(ctx, metrics)
@@ -177,6 +206,7 @@ func (rm *ErrorStorageMiddleware) SaveAll(ctx context.Context, metrics []models.
 	return rm.replay(ctx, operation)
 }
 
+// Ping проверяет доступность хранилища.
 func (rm *ErrorStorageMiddleware) Ping(ctx context.Context) error {
 	operation := func() error {
 		return rm.next.Ping(ctx)

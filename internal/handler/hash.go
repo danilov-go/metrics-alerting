@@ -30,6 +30,8 @@ func (h *hashWriter) Write(b []byte) (int, error) {
 	return h.w.Write(b)
 }
 
+// HashMiddleware проверяет HMAC-SHA256 подпись входящих запросов в заголовке HashSHA256
+// и автоматически подписывает исходящие ответы сервера.
 func HashMiddleware(key string) func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

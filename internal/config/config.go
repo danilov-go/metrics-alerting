@@ -1,3 +1,4 @@
+// Package config управляет конфигурацией приложения.
 package config
 
 import (
@@ -11,37 +12,69 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+// NetAddress определяет адрес сервера.
 type NetAddress struct {
 	Host string
 	Port int
 }
 
+// ConfigAgent определяет конфигурацию агента.
 type ConfigAgent struct {
-	Net            NetAddress `env:"ADDRESS"`
-	PollInterval   int        `env:"POLL_INTERVAL"`
-	ReportInterval int        `env:"REPORT_INTERVAL"`
-	Key            string     `env:"KEY"`
-	RateLimit      int        `env:"RATE_LIMIT"`
+	// Net содержит сетевой адрес для запуска агента.
+	Net NetAddress `env:"ADDRESS"`
+	// PollInterval определяет интервал сбора метрик.
+	PollInterval int `env:"POLL_INTERVAL"`
+	// ReportInterval определяет интервал отправки метрик на сервер.
+	ReportInterval int `env:"REPORT_INTERVAL"`
+	// Key содержит ключ для подписи данных.
+	Key string `env:"KEY"`
+	// RateLimit ограничивает количество исходящих запросов.
+	RateLimit int `env:"RATE_LIMIT"`
 }
 
+// ConfigServer определяет конфигурацию сервера.
 type ConfigServer struct {
-	Net             NetAddress `env:"ADDRESS"`
-	StoreIntrval    int        `env:"STORE_INTERVAL"`
-	FileStoragePath string     `env:"FILE_STORAGE_PATH"`
-	Restore         bool       `env:"RESTORE"`
-	DatabaseDsn     string     `env:"DATABASE_DSN"`
-	Key             string     `env:"KEY"`
-	ValidDB         bool
-	ValidFile       bool
+	// Net содержит сетевой адрес для запуска сервера.
+	Net NetAddress `env:"ADDRESS"`
+	// StoreInterval определяет интервал времени для сохранения метрик на диск.
+	StoreIntrval int `env:"STORE_INTERVAL"`
+	// FileStoragePath определяет путь к файлу, куда сохраняются метрики.
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	// Restore определяет, нужно ли загружать сохранённые метрики из файла при старте сервера.
+	Restore bool `env:"RESTORE"`
+	// DatabaseDSN содержит строку подключения к базе данных PostgreSQL.
+	DatabaseDSN string `env:"DATABASE_DSN"`
+	// Key содержит ключ для подписи данных.
+	Key string `env:"KEY"`
+	// AuditFile определяет путь к файлу логов аудита.
+	AuditFile string `env:"AUDIT_FILE"`
+	// AuditURL содержит URL-адрес внешнего сервиса аудита.
+	AuditURL string `env:"AUDIT_URL"`
+	// RetryDuration определяет продолжительность попыток повтора операций.
+	RetryDuration int `env:"RETRY_DURATION"`
+	// RetryInterval определяет интервал между повторными попытками выполнения операций.
+	RetryInterval int `env:"RETRY_INTERVAL"`
+	// ValidDB флаг, указывающий на корректность строки подключения к базе данных.
+	ValidDB bool
+	// ValidFile флаг, указывающий на корректность пути к файлу хранилища метрик.
+	ValidFile bool
+	// ValidFileAudit флаг, указывающий на корректность и доступность файла аудита.
+	ValidFileAudit bool
+	// ValidURLAudit флаг, указывающий на корректность и доступность URL аудита.
+	ValidURLAudit bool
 }
 
+// String возвращает строковое представление сетевого адреса в формате host:port.
 func (n NetAddress) String() string {
 	return n.Host + ":" + strconv.Itoa(n.Port)
 }
 
+// UnmarshalText десериализует сетевой адрес из текстового формата для библиотеки env.
 func (n *NetAddress) UnmarshalText(adr []byte) error {
 	return n.Set(string(adr))
 }
+
+// Set парсит строку в формате host:port и валидирует ее для пакета flag.
 func (n *NetAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
 	if len(hp) != 2 {
@@ -56,14 +89,19 @@ func (n *NetAddress) Set(s string) error {
 	return nil
 }
 
+// Get парсит конфигурацию сервера.
 func (s *ConfigServer) Get() {
 	f := flag.NewFlagSet("Run server", flag.ContinueOnError)
 	f.Var(&s.Net, "a", "Net address host:port")
 	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
 	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
-	f.StringVar(&s.DatabaseDsn, "d", s.DatabaseDsn, "DatabaseDsn")
+	f.StringVar(&s.DatabaseDSN, "d", s.DatabaseDSN, "DatabaseDSN")
 	f.StringVar(&s.Key, "k", s.Key, "Key")
+	f.StringVar(&s.AuditFile, "audit-file", s.AuditFile, "AuditFile")
+	f.StringVar(&s.AuditURL, "audit-url", s.AuditURL, "AuditURL")
 	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
+	f.IntVar(&s.RetryDuration, "retry-duration", s.RetryDuration, "RetryDuration")
+	f.IntVar(&s.RetryInterval, "retry-interval", s.RetryInterval, "RetryInterval")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Println(err)
@@ -72,7 +110,7 @@ func (s *ConfigServer) Get() {
 	f.Visit(func(fl *flag.Flag) {
 		switch fl.Name {
 		case "d":
-			if s.DatabaseDsn != "" {
+			if s.DatabaseDSN != "" {
 				s.ValidDB = true
 			}
 		case "f":
@@ -81,6 +119,14 @@ func (s *ConfigServer) Get() {
 			}
 		case "r":
 			s.ValidFile = true
+		case "audit-file":
+			if s.AuditFile != "" {
+				s.ValidFileAudit = true
+			}
+		case "audit-url":
+			if s.AuditURL != "" {
+				s.ValidURLAudit = true
+			}
 		}
 	})
 	err = env.Parse(s)
@@ -88,8 +134,8 @@ func (s *ConfigServer) Get() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	dsn, envDb := os.LookupEnv("DATABASE_DSN")
-	if envDb == true && dsn != "" {
+	dsn, envDB := os.LookupEnv("DATABASE_DSN")
+	if envDB && dsn != "" {
 		s.ValidDB = true
 	}
 	path, envPath := os.LookupEnv("FILE_STORAGE_PATH")
@@ -97,8 +143,17 @@ func (s *ConfigServer) Get() {
 	if (envPath && path != "") || envRestore {
 		s.ValidFile = true
 	}
+	pathAudit, envPathAudit := os.LookupEnv("AUDIT_FILE")
+	url, envURL := os.LookupEnv("AUDIT_URL")
+	if envPathAudit && pathAudit != "" {
+		s.ValidFileAudit = true
+	}
+	if envURL && url != "" {
+		s.ValidURLAudit = true
+	}
 }
 
+// Get парсит конфигурацию агента.
 func (a *ConfigAgent) Get() {
 	f := flag.NewFlagSet("Run agent", flag.ContinueOnError)
 	f.Var(&a.Net, "a", "Net address host:port")
@@ -119,7 +174,6 @@ func (a *ConfigAgent) Get() {
 	if a.PollInterval == 0 {
 		fmt.Println("pollInterval не может быть нулем")
 		os.Exit(1)
-
 	}
 	if a.PollInterval > a.ReportInterval {
 		fmt.Println("pollInterval не может быть больше reportInterval")

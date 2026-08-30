@@ -1,3 +1,4 @@
+// Package repository реализует хранилище данных в оперативной памяти.
 package repository
 
 import (
@@ -18,21 +19,30 @@ type log interface {
 	Errorw(msg string, keysAndValues ...any)
 	Infow(msg string, keysAndValues ...any)
 }
+
+// ConfigFile опредиляет параметры для конфигурации файлового хранилища.
 type ConfigFile struct {
-	Path     string
+	// Path определяет путь к файлу для сохранения данных.
+	Path string
+	// Interval определяет периодичность записи метрик в файл.
 	Interval time.Duration
-	Restore  bool
+	// Restore определяет необходимость загрузки ранее сохраненных метрик при старте.
+	Restore bool
 }
 
+// MemStorage реализует хранилище данных в оперативной памяти.
 type MemStorage struct {
-	Gauges   map[string]float64 `json:"gauges"`
-	Counters map[string]int64   `json:"counters"`
-	mu       sync.RWMutex       `json:"-"`
+	// Gauges хранит метрики типа gauge.
+	Gauges map[string]float64 `json:"gauges"`
+	// Counters хранит метрики типа counter.
+	Counters map[string]int64 `json:"counters"`
+	mu       sync.RWMutex     `json:"-"`
 	logger   log
 	filePath string        `json:"-"`
 	interval time.Duration `json:"-"`
 }
 
+// InitMemStorage создает новый экземпляр MemStorage.
 func InitMemStorage(cfg ConfigFile, l log) *MemStorage {
 	m := &MemStorage{
 		Gauges:   make(map[string]float64),
@@ -53,6 +63,7 @@ func InitMemStorage(cfg ConfigFile, l log) *MemStorage {
 	return m
 }
 
+// SaveGauges сохраняет или перезаписывает метрику типа "gauge".
 func (g *MemStorage) SaveGauges(ctx context.Context, name string, value float64) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -63,6 +74,7 @@ func (g *MemStorage) SaveGauges(ctx context.Context, name string, value float64)
 	return nil
 }
 
+// SaveCounters сохраняет или обновляет метрику типа "counter".
 func (c *MemStorage) SaveCounters(ctx context.Context, name string, value int64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -82,6 +94,7 @@ func (c *MemStorage) SaveCounters(ctx context.Context, name string, value int64)
 	return nil
 }
 
+// GetGauges возвращает значение метрики типа "gauge" по её названию.
 func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -95,6 +108,7 @@ func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error
 	return val, nil
 }
 
+// GetCounters возвращает значение метрики типа "counter" по её названию.
 func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -108,6 +122,7 @@ func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error
 	return val, nil
 }
 
+// GetAllGauges возвращает map всех хранящихся метрик типа "gauge".
 func (g *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, error) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
@@ -116,6 +131,7 @@ func (g *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, erro
 	return gauges, nil
 }
 
+// GetAllCounters возвращает map всех хранящихся метрик типа "counter".
 func (c *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -124,6 +140,7 @@ func (c *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, erro
 	return counters, nil
 }
 
+// SaveAll выполняет пакетное сохранение метрик.
 func (m *MemStorage) SaveAll(ctx context.Context, metrics []models.Metrics) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -161,6 +178,7 @@ func (m *MemStorage) SaveAll(ctx context.Context, metrics []models.Metrics) erro
 	return nil
 }
 
+// Ping проверяет доступность хранилища.
 func (m *MemStorage) Ping(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -168,6 +186,7 @@ func (m *MemStorage) Ping(ctx context.Context) error {
 	return errors.New("ошибка подключения к БД")
 }
 
+// SaveFile сохраняет текущие метрики в файл.
 func (m *MemStorage) SaveFile() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

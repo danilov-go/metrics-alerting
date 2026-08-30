@@ -1,8 +1,11 @@
 package main
 
 import (
+	"net/http"
+	_ "net/http/pprof"
 	"time"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/audit"
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
 	"github.com/danilov-go/metrics-alerting.git/internal/handler"
@@ -10,6 +13,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/danilov-go/metrics-alerting.git/internal/server"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
 
@@ -23,46 +27,100 @@ func main() {
 		StoreIntrval:    300,
 		FileStoragePath: "metricStorage.txt",
 		Restore:         false,
-		DatabaseDsn:     "host=localhost user=metrics password=123 dbname=metrics sslmode=disable",
+		DatabaseDSN:     "",
 		Key:             "",
+		AuditFile:       "",
+		AuditURL:        "",
+		RetryDuration:   1,
+		RetryInterval:   2,
 	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
 	configs.Get()
+	if configs.ValidDB && configs.DatabaseDSN == "" {
+		panic("DatabaseDSN передан, но является пустым")
+	}
 	cfg := repository.ConfigFile{
 		Path:     configs.FileStoragePath,
 		Interval: time.Duration(configs.StoreIntrval) * time.Second,
 		Restore:  configs.Restore,
 	}
-	pg, err := db.InitDB(configs.DatabaseDsn)
-	if err != nil {
-		logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
+	var pg handler.Storage
+	var dbErr error
+	if configs.ValidDB {
+		pg, dbErr = db.InitDB(configs.DatabaseDSN)
+		if dbErr != nil {
+			logger.Log.Info("не удалось подключится к базе данных, переключаемся на memstorage", zap.Error(dbErr))
+		}
 	}
-	switch {
-	case configs.ValidDB == true && err == nil:
-		storage = handler.NewErrorMiddleware(pg)
-	case configs.ValidFile == true:
-		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
-	default:
+	if configs.ValidDB && dbErr == nil && pg != nil {
+		duration := time.Duration(configs.RetryDuration) * time.Second
+		interval := time.Duration(configs.RetryInterval) * time.Second
+		storage = handler.NewErrorMiddleware(pg, duration, interval)
+	} else {
 		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
 	logger.Log.Sugar().Info("Key", configs.Key)
+	client := resty.New().
+		SetTimeout(5 * time.Second).
+		SetRetryCount(configs.RetryDuration).
+		SetRetryWaitTime(time.Duration(configs.RetryInterval) * time.Second).
+		AddRetryCondition(
+			func(r *resty.Response, err error) bool {
+				if err != nil {
+					return true
+				}
+				return r.StatusCode() >= 500 || r.StatusCode() == http.StatusTooManyRequests
+			},
+		)
+	event := audit.NewEvent(logger.Log.Sugar())
+	var validAudit bool
+	if configs.ValidFileAudit {
+		sub := audit.NewFileSubscriber(configs.AuditFile, logger.Log.Sugar())
+		if sub != nil {
+			event.Register(sub)
+			defer func() {
+				if err := sub.Close(); err != nil {
+					logger.Log.Sugar().Errorw("ошибка при закрытии файла аудита", "err", err)
+				}
+			}()
+			validAudit = true
+		}
+	}
+	if configs.ValidURLAudit {
+		sub := audit.NewURLSubscriber(configs.AuditURL, logger.Log.Sugar(), client)
+		if sub != nil {
+			event.Register(sub)
+			defer sub.Close()
+			validAudit = true
+		}
+	}
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
 	r.Use(handler.GzipMiddleware)
 	r.Use(handler.HashMiddleware(configs.Key))
-	r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
 	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
-	r.Post("/updates", h.ApiUpdatesHandler())
-	r.Post("/updates/", h.ApiUpdatesHandler())
-	r.Post("/update", h.ApiUpdateHandler())
-	r.Post("/update/", h.ApiUpdateHandler())
 	r.Post("/value", h.ApiValueHandler())
 	r.Post("/value/", h.ApiValueHandler())
 	r.Get("/ping", h.PingHandler())
 	r.Get("/", h.ExposeMetricsHandler())
+	r.Group(func(r chi.Router) {
+		if validAudit {
+			r.Use(handler.AuditMiddleware(event))
+		}
+		r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
+		r.Post("/updates", h.ApiUpdatesHandler())
+		r.Post("/updates/", h.ApiUpdatesHandler())
+		r.Post("/update", h.ApiUpdateHandler())
+		r.Post("/update/", h.ApiUpdateHandler())
+	})
+	go func() {
+		if err := http.ListenAndServe(":8081", nil); err != nil {
+			logger.Log.Sugar().Errorw("ошибка запуска pprof сервера", "error", err)
+		}
+	}()
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	if err := serv.Run(); err != nil {
 		panic(err)
