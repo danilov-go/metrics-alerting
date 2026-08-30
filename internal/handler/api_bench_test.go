@@ -30,9 +30,8 @@ func BenchmarkApiUpdateHandler(b *testing.B) {
 	}
 	body, err := json.Marshal(metric)
 	assert.NoError(b, err)
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		req := httptest.NewRequest(http.MethodPost, "/update", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -56,9 +55,8 @@ func BenchmarkApiValueHandler(b *testing.B) {
 	}
 	body, err := json.Marshal(metric)
 	assert.NoError(b, err)
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		req := httptest.NewRequest(http.MethodPost, "/value", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -87,9 +85,8 @@ func BenchmarkApiUpdatesHandler(b *testing.B) {
 	}
 	body, err := json.Marshal(metrics)
 	assert.NoError(b, err)
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		b.StopTimer()
 		req := httptest.NewRequest(http.MethodPost, "/updates", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")

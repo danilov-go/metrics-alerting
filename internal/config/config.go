@@ -42,14 +42,14 @@ type ConfigServer struct {
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	// Restore определяет, нужно ли загружать сохранённые метрики из файла при старте сервера.
 	Restore bool `env:"RESTORE"`
-	// DatabaseDsn содержит строку подключения к базе данных PostgreSQL.
-	DatabaseDsn string `env:"DATABASE_DSN"`
+	// DatabaseDSN содержит строку подключения к базе данных PostgreSQL.
+	DatabaseDSN string `env:"DATABASE_DSN"`
 	// Key содержит ключ для подписи данных.
 	Key string `env:"KEY"`
 	// AuditFile определяет путь к файлу логов аудита.
 	AuditFile string `env:"AUDIT_FILE"`
-	// AuditUrl содержит URL-адрес внешнего сервиса аудита.
-	AuditUrl string `env:"AUDIT_URL"`
+	// AuditURL содержит URL-адрес внешнего сервиса аудита.
+	AuditURL string `env:"AUDIT_URL"`
 	// RetryDuration определяет продолжительность попыток повтора операций.
 	RetryDuration int `env:"RETRY_DURATION"`
 	// RetryInterval определяет интервал между повторными попытками выполнения операций.
@@ -60,8 +60,8 @@ type ConfigServer struct {
 	ValidFile bool
 	// ValidFileAudit флаг, указывающий на корректность и доступность файла аудита.
 	ValidFileAudit bool
-	// ValidUrlAudit флаг, указывающий на корректность и доступность URL аудита.
-	ValidUrlAudit bool
+	// ValidURLAudit флаг, указывающий на корректность и доступность URL аудита.
+	ValidURLAudit bool
 }
 
 // String возвращает строковое представление сетевого адреса в формате host:port.
@@ -95,10 +95,10 @@ func (s *ConfigServer) Get() {
 	f.Var(&s.Net, "a", "Net address host:port")
 	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
 	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
-	f.StringVar(&s.DatabaseDsn, "d", s.DatabaseDsn, "DatabaseDsn")
+	f.StringVar(&s.DatabaseDSN, "d", s.DatabaseDSN, "DatabaseDSN")
 	f.StringVar(&s.Key, "k", s.Key, "Key")
 	f.StringVar(&s.AuditFile, "audit-file", s.AuditFile, "AuditFile")
-	f.StringVar(&s.AuditUrl, "audit-url", s.AuditUrl, "AuditUrl")
+	f.StringVar(&s.AuditURL, "audit-url", s.AuditURL, "AuditURL")
 	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
 	f.IntVar(&s.RetryDuration, "retry-duration", s.RetryDuration, "RetryDuration")
 	f.IntVar(&s.RetryInterval, "retry-interval", s.RetryInterval, "RetryInterval")
@@ -110,7 +110,7 @@ func (s *ConfigServer) Get() {
 	f.Visit(func(fl *flag.Flag) {
 		switch fl.Name {
 		case "d":
-			if s.DatabaseDsn != "" {
+			if s.DatabaseDSN != "" {
 				s.ValidDB = true
 			}
 		case "f":
@@ -124,8 +124,8 @@ func (s *ConfigServer) Get() {
 				s.ValidFileAudit = true
 			}
 		case "audit-url":
-			if s.AuditUrl != "" {
-				s.ValidUrlAudit = true
+			if s.AuditURL != "" {
+				s.ValidURLAudit = true
 			}
 		}
 	})
@@ -134,8 +134,8 @@ func (s *ConfigServer) Get() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	dsn, envDb := os.LookupEnv("DATABASE_DSN")
-	if envDb == true && dsn != "" {
+	dsn, envDB := os.LookupEnv("DATABASE_DSN")
+	if envDB && dsn != "" {
 		s.ValidDB = true
 	}
 	path, envPath := os.LookupEnv("FILE_STORAGE_PATH")
@@ -144,12 +144,12 @@ func (s *ConfigServer) Get() {
 		s.ValidFile = true
 	}
 	pathAudit, envPathAudit := os.LookupEnv("AUDIT_FILE")
-	url, envUrl := os.LookupEnv("AUDIT_URL")
+	url, envURL := os.LookupEnv("AUDIT_URL")
 	if envPathAudit && pathAudit != "" {
 		s.ValidFileAudit = true
 	}
-	if envUrl && url != "" {
-		s.ValidUrlAudit = true
+	if envURL && url != "" {
+		s.ValidURLAudit = true
 	}
 }
 

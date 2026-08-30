@@ -27,10 +27,10 @@ func main() {
 		StoreIntrval:    300,
 		FileStoragePath: "metricStorage.txt",
 		Restore:         false,
-		DatabaseDsn:     "host=localhost user=metrics password=123 dbname=metrics sslmode=disable",
+		DatabaseDSN:     "",
 		Key:             "",
 		AuditFile:       "",
-		AuditUrl:        "",
+		AuditURL:        "",
 		RetryDuration:   1,
 		RetryInterval:   2,
 	}
@@ -38,38 +38,63 @@ func main() {
 		panic(err)
 	}
 	configs.Get()
+	if configs.ValidDB && configs.DatabaseDSN == "" {
+		panic("DatabaseDSN передан, но является пустым")
+	}
 	cfg := repository.ConfigFile{
 		Path:     configs.FileStoragePath,
 		Interval: time.Duration(configs.StoreIntrval) * time.Second,
 		Restore:  configs.Restore,
 	}
-	pg, err := db.InitDB(configs.DatabaseDsn)
-	if err != nil {
-		logger.Log.Info("не удалось подключится к базе данных", zap.Error(err))
+	var pg handler.Storage
+	var dbErr error
+	if configs.ValidDB {
+		pg, dbErr = db.InitDB(configs.DatabaseDSN)
+		if dbErr != nil {
+			logger.Log.Info("не удалось подключится к базе данных, переключаемся на memstorage", zap.Error(dbErr))
+		}
 	}
-	switch {
-	case configs.ValidDB == true && err == nil:
+	if configs.ValidDB && dbErr == nil && pg != nil {
 		duration := time.Duration(configs.RetryDuration) * time.Second
 		interval := time.Duration(configs.RetryInterval) * time.Second
 		storage = handler.NewErrorMiddleware(pg, duration, interval)
-	case configs.ValidFile == true:
-		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
-	default:
+	} else {
 		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
 	logger.Log.Sugar().Info("Key", configs.Key)
-	client := resty.New().SetTimeout(5 * time.Second)
+	client := resty.New().
+		SetTimeout(5 * time.Second).
+		SetRetryCount(configs.RetryDuration).
+		SetRetryWaitTime(time.Duration(configs.RetryInterval) * time.Second).
+		AddRetryCondition(
+			func(r *resty.Response, err error) bool {
+				if err != nil {
+					return true
+				}
+				return r.StatusCode() >= 500 || r.StatusCode() == http.StatusTooManyRequests
+			},
+		)
 	event := audit.NewEvent(logger.Log.Sugar())
 	var validAudit bool
 	if configs.ValidFileAudit {
 		sub := audit.NewFileSubscriber(configs.AuditFile, logger.Log.Sugar())
-		event.Register(sub)
-		validAudit = true
+		if sub != nil {
+			event.Register(sub)
+			defer func() {
+				if err := sub.Close(); err != nil {
+					logger.Log.Sugar().Errorw("ошибка при закрытии файла аудита", "err", err)
+				}
+			}()
+			validAudit = true
+		}
 	}
-	if configs.ValidUrlAudit {
-		sub := audit.NewURLSubscriber(configs.AuditUrl, logger.Log.Sugar(), client)
-		event.Register(sub)
-		validAudit = true
+	if configs.ValidURLAudit {
+		sub := audit.NewURLSubscriber(configs.AuditURL, logger.Log.Sugar(), client)
+		if sub != nil {
+			event.Register(sub)
+			defer sub.Close()
+			validAudit = true
+		}
 	}
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()

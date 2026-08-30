@@ -16,13 +16,13 @@ type log interface {
 	Errorw(msg string, keysAndValues ...any)
 }
 
-// Handler связывает HTTP-запросов с хранилищем данных.
+// MetricsHandler связывает HTTP-запросов с хранилищем данных.
 type MetricsHandler struct {
 	storage Storage
 	logger  log
 }
 
-// NewHandlers создает новый экземпляр Handler.
+// NewMetricsHandler создает новый экземпляр Handler.
 func NewMetricsHandler(storage Storage, l log) *MetricsHandler {
 	return &MetricsHandler{
 		storage: storage,
@@ -77,6 +77,12 @@ func classifyPgError(pgErr *pgconn.PgError) PGErrorClassification {
 	case pgerrcode.ConnectionException,
 		pgerrcode.ConnectionDoesNotExist,
 		pgerrcode.ConnectionFailure:
+		return Retriable
+	case pgerrcode.SerializationFailure,
+		pgerrcode.DeadlockDetected:
+		return Retriable
+	case pgerrcode.AdminShutdown,
+		pgerrcode.TooManyConnections:
 		return Retriable
 	}
 	return NonRetriable
