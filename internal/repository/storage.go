@@ -201,7 +201,7 @@ func (m *MemStorage) save() error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	buf := bufio.NewWriter(file)
 	err = json.NewEncoder(buf).Encode(m)
 	if err != nil {
@@ -218,7 +218,7 @@ func (m *MemStorage) loadFile(path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	buf := bufio.NewReader(file)
 	err = json.NewDecoder(buf).Decode(m)
 	if err != nil {

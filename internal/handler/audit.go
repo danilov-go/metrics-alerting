@@ -45,7 +45,7 @@ func AuditMiddleware(event audit.Publisher) func(http.Handler) http.Handler {
 			if r.Body != nil {
 				body, err := io.ReadAll(r.Body)
 				if err == nil {
-					r.Body.Close()
+					_ = r.Body.Close()
 					r.Body = io.NopCloser(bytes.NewReader(body))
 					var metric []metricName
 					if err := json.Unmarshal(body, &metric); err == nil {

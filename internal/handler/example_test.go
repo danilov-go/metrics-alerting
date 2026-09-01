@@ -12,7 +12,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 )
 
-func ExampleMetricsHandler_ApiUpdateHandler() {
+func ExampleMetricsHandler_APIUpdateHandler() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
@@ -23,7 +23,7 @@ func ExampleMetricsHandler_ApiUpdateHandler() {
 	req := httptest.NewRequest(http.MethodPost, "/update/", strings.NewReader(metric))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.ApiUpdateHandler().ServeHTTP(w, req)
+	h.APIUpdateHandler().ServeHTTP(w, req)
 	fmt.Println(w.Code)
 	fmt.Println(w.Header().Get("Content-Type"))
 
@@ -32,7 +32,7 @@ func ExampleMetricsHandler_ApiUpdateHandler() {
 	// application/json
 }
 
-func ExampleMetricsHandler_ApiValueHandler() {
+func ExampleMetricsHandler_APIValueHandler() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
@@ -45,7 +45,7 @@ func ExampleMetricsHandler_ApiValueHandler() {
 	req := httptest.NewRequest(http.MethodPost, "/value/", strings.NewReader(metric))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.ApiValueHandler().ServeHTTP(w, req)
+	h.APIValueHandler().ServeHTTP(w, req)
 	fmt.Println(w.Code)
 	fmt.Println(w.Header().Get("Content-Type"))
 	fmt.Println(w.Body.String())
@@ -56,7 +56,7 @@ func ExampleMetricsHandler_ApiValueHandler() {
 	// {"id":"PollCount","type":"counter","delta":5}
 }
 
-func ExampleMetricsHandler_ApiUpdatesHandler() {
+func ExampleMetricsHandler_APIUpdatesHandler() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
@@ -70,7 +70,7 @@ func ExampleMetricsHandler_ApiUpdatesHandler() {
 	req := httptest.NewRequest(http.MethodPost, "/updates/", strings.NewReader(metrics))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	h.ApiUpdatesHandler().ServeHTTP(w, req)
+	h.APIUpdatesHandler().ServeHTTP(w, req)
 	fmt.Println(w.Code)
 	fmt.Println(w.Header().Get("Content-Type"))
 

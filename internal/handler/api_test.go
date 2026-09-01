@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-func TestApiUpdateHandler(t *testing.T) {
+func TestAPIUpdateHandler(t *testing.T) {
 	type metricExpected struct {
 		mType string
 		name  string
@@ -95,6 +95,28 @@ func TestApiUpdateHandler(t *testing.T) {
 				code: http.StatusBadRequest,
 			},
 		},
+		{
+			name: "отсутствует value",
+			m: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+				Value: nil,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+		},
+		{
+			name: "отсутствует delta",
+			m: models.Metrics{
+				ID:    "PollCount",
+				MType: models.Counter,
+				Delta: nil,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -105,7 +127,7 @@ func TestApiUpdateHandler(t *testing.T) {
 			logger := zaptest.NewLogger(t)
 			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Post("/update", h.ApiUpdateHandler())
+			r.Post("/update", h.APIUpdateHandler())
 			var body []byte
 			var err error
 			if tt.rawBody != "" {
@@ -134,7 +156,7 @@ func TestApiUpdateHandler(t *testing.T) {
 	}
 }
 
-func TestApiValueHandler(t *testing.T) {
+func TestAPIValueHandler(t *testing.T) {
 	type want struct {
 		code  int
 		mType string
@@ -143,9 +165,10 @@ func TestApiValueHandler(t *testing.T) {
 		valC  int64
 	}
 	tests := []struct {
-		name     string
-		m        models.Metrics
-		expected want
+		name        string
+		m           models.Metrics
+		expected    want
+		contentType string
 	}{
 		{
 			name: "положительный тест gauge",
@@ -159,6 +182,7 @@ func TestApiValueHandler(t *testing.T) {
 				mName: "Alloc",
 				valG:  123.45,
 			},
+			contentType: "application/json",
 		},
 		{
 			name: "положительный тест counter",
@@ -172,6 +196,7 @@ func TestApiValueHandler(t *testing.T) {
 				mName: "PollCount",
 				valC:  15,
 			},
+			contentType: "application/json",
 		},
 		{
 			name: "неверный тип метрики",
@@ -182,6 +207,7 @@ func TestApiValueHandler(t *testing.T) {
 			expected: want{
 				code: http.StatusBadRequest,
 			},
+			contentType: "application/json",
 		},
 		{
 			name: "пустое имя метрики",
@@ -192,6 +218,40 @@ func TestApiValueHandler(t *testing.T) {
 			expected: want{
 				code: http.StatusNotFound,
 			},
+			contentType: "application/json",
+		},
+		{
+			name: "неверный Content-Type header",
+			m: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+			},
+			expected: want{
+				code: http.StatusBadRequest,
+			},
+			contentType: "text/plain",
+		},
+		{
+			name: "метрика gauge отсутствует в хранилище",
+			m: models.Metrics{
+				ID:    "unknow",
+				MType: models.Gauge,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "метрика counter отсутствует в хранилище",
+			m: models.Metrics{
+				ID:    "unknow",
+				MType: models.Counter,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+			contentType: "application/json",
 		},
 	}
 	for _, tt := range tests {
@@ -203,20 +263,22 @@ func TestApiValueHandler(t *testing.T) {
 			if tt.expected.mName != "" {
 				switch tt.expected.mType {
 				case models.Counter:
-					storage.SaveCounters(t.Context(), tt.expected.mName, tt.expected.valC)
+					err := storage.SaveCounters(t.Context(), tt.expected.mName, tt.expected.valC)
+					assert.NoError(t, err)
 				case models.Gauge:
-					storage.SaveGauges(t.Context(), tt.expected.mName, tt.expected.valG)
+					err := storage.SaveGauges(t.Context(), tt.expected.mName, tt.expected.valG)
+					assert.NoError(t, err)
 				}
 			}
 			logger := zaptest.NewLogger(t)
 			h := handler.NewMetricsHandler(storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Post("/value", h.ApiValueHandler())
+			r.Post("/value", h.APIValueHandler())
 			body, err := json.Marshal(tt.m)
 			assert.NoError(t, err)
 			buf := bytes.NewBuffer(body)
 			request := httptest.NewRequest(http.MethodPost, "/value", buf)
-			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Content-Type", tt.contentType)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
 			assert.Equal(t, tt.expected.code, w.Code)
@@ -237,7 +299,7 @@ func TestApiValueHandler(t *testing.T) {
 	}
 }
 
-func TestApiUpdatesHandler(t *testing.T) {
+func TestAPIUpdatesHandler(t *testing.T) {
 	type metricExpected struct {
 		mType string
 		name  string
@@ -316,7 +378,7 @@ func TestApiUpdatesHandler(t *testing.T) {
 			logger := zaptest.NewLogger(t)
 			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Post("/updates", h.ApiUpdatesHandler())
+			r.Post("/updates", h.APIUpdatesHandler())
 			var body []byte
 			var err error
 			if tt.rawBody != "" {

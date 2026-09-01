@@ -19,8 +19,8 @@ var pool = sync.Pool{
 	},
 }
 
-// ApiUpdateHandler возвращает обработчик для обновления или создания одиночной метрики из JSON.
-func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
+// APIUpdateHandler возвращает обработчик для обновления или создания одиночной метрики из JSON.
+func (h *MetricsHandler) APIUpdateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
@@ -83,12 +83,15 @@ func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 			h.logger.Errorw("ошибка сериализации", "error", err)
 			return
 		}
-		w.Write(buf.Bytes())
+		_, err := w.Write(buf.Bytes())
+		if err != nil {
+			h.logger.Errorw("ошибка записи ответа", "error", err)
+		}
 	}
 }
 
-// ApiValueHandler возвращает обработчик для получения текущего значения метрики по её типу и названию.
-func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
+// APIValueHandler возвращает обработчик для получения текущего значения метрики по её типу и названию.
+func (h *MetricsHandler) APIValueHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
@@ -153,12 +156,15 @@ func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
 			h.logger.Errorw("ошибка сериализации", "error", err)
 			return
 		}
-		w.Write(buf.Bytes())
+		_, err := w.Write(buf.Bytes())
+		if err != nil {
+			h.logger.Errorw("ошибка записи ответа", "error", err)
+		}
 	}
 }
 
-// ApiUpdatesHandler возвращает обработчик для пакетного сохранения метрик.
-func (h *MetricsHandler) ApiUpdatesHandler() http.HandlerFunc {
+// APIUpdatesHandler возвращает обработчик для пакетного сохранения метрик.
+func (h *MetricsHandler) APIUpdatesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var metrics []models.Metrics
@@ -200,6 +206,9 @@ func (h *MetricsHandler) ApiUpdatesHandler() http.HandlerFunc {
 			h.logger.Errorw("ошибка сериализации", "error", err)
 			return
 		}
-		w.Write(buf.Bytes())
+		_, err = w.Write(buf.Bytes())
+		if err != nil {
+			h.logger.Errorw("ошибка записи ответа", "error", err)
+		}
 	}
 }
