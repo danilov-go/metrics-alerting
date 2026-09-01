@@ -19,6 +19,13 @@ type storageDB struct {
 	db *sql.DB
 }
 
+// NewStorageDB создает новый экземпляр storageDB.
+func NewStorageDB(sql *sql.DB) *storageDB {
+	return &storageDB{
+		db: sql,
+	}
+}
+
 // InitDB инициализирует подключение к базе данных PostgreSQL по переданной строке соединения.
 func InitDB(ps string) (*storageDB, error) {
 	db, err := sql.Open("pgx", ps)
@@ -27,7 +34,9 @@ func InitDB(ps string) (*storageDB, error) {
 	}
 	driver, err := postgres.WithInstance(db, &postgres.Config{})
 	if err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, errors.Join(err, closeErr)
+		}
 		return nil, err
 	}
 	m, err := migrate.NewWithDatabaseInstance(
@@ -36,11 +45,15 @@ func InitDB(ps string) (*storageDB, error) {
 		driver,
 	)
 	if err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, errors.Join(err, closeErr)
+		}
 		return nil, err
 	}
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			return nil, errors.Join(err, closeErr)
+		}
 		return nil, err
 	}
 	return &storageDB{
@@ -124,11 +137,13 @@ func (d *storageDB) GetAllGauges(ctx context.Context) (map[string]float64, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	for rows.Next() {
 		var id string
 		var value sql.NullFloat64
-		err := rows.Scan(&id, &value)
+		err = rows.Scan(&id, &value)
 		if err != nil {
 			return nil, err
 		}
@@ -153,11 +168,13 @@ func (d *storageDB) GetAllCounters(ctx context.Context) (map[string]int64, error
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	for rows.Next() {
 		var id string
 		var delta sql.NullInt64
-		err := rows.Scan(&id, &delta)
+		err = rows.Scan(&id, &delta)
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +197,9 @@ func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		_ = tx.Rollback()
+	}()
 	stmtCounter, err := tx.PrepareContext(ctx, `
 		INSERT INTO metrics (id, mtype, delta) VALUES ($1, 'counter', $2)
 		ON CONFLICT (id) 
@@ -189,7 +208,9 @@ func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error
 	if err != nil {
 		return err
 	}
-	defer stmtCounter.Close()
+	defer func() {
+		_ = stmtCounter.Close()
+	}()
 	stmtGauge, err := tx.PrepareContext(ctx, `
 		INSERT INTO metrics (id, mtype, value) VALUES ($1, 'gauge', $2)
 		ON CONFLICT (id) 
@@ -198,14 +219,16 @@ func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error
 	if err != nil {
 		return err
 	}
-	defer stmtGauge.Close()
+	defer func() {
+		_ = stmtCounter.Close()
+	}()
 	for _, m := range metrics {
 		switch m.MType {
 		case models.Counter:
 			if m.Delta == nil {
 				return fmt.Errorf("delta равно nil")
 			}
-			_, err := stmtCounter.ExecContext(ctx, m.ID, *m.Delta)
+			_, err = stmtCounter.ExecContext(ctx, m.ID, *m.Delta)
 			if err != nil {
 				return err
 			}
@@ -213,7 +236,7 @@ func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error
 			if m.Value == nil {
 				return fmt.Errorf("value равно nil")
 			}
-			_, err := stmtGauge.ExecContext(ctx, m.ID, *m.Value)
+			_, err = stmtGauge.ExecContext(ctx, m.ID, *m.Value)
 			if err != nil {
 				return err
 			}
