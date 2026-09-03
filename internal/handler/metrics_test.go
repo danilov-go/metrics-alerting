@@ -129,6 +129,7 @@ func TestGetMetricHandler(t *testing.T) {
 		mName    string
 		valG     float64
 		valC     int64
+		record   bool
 		expected want
 	}{
 		{
@@ -140,6 +141,7 @@ func TestGetMetricHandler(t *testing.T) {
 				code: http.StatusOK,
 				valG: 123.45,
 			},
+			record: true,
 		},
 		{
 			name:  "положительный тест counter",
@@ -150,6 +152,7 @@ func TestGetMetricHandler(t *testing.T) {
 				code: http.StatusOK,
 				valC: 15,
 			},
+			record: true,
 		},
 		{
 			name:  "неверный тип метрики",
@@ -165,6 +168,25 @@ func TestGetMetricHandler(t *testing.T) {
 			expected: want{
 				code: http.StatusNotFound,
 			},
+			record: false,
+		},
+		{
+			name:  "метрика gauge отсутствует в хранилище",
+			mType: "gauge",
+			mName: "unknow",
+			expected: want{
+				code: http.StatusNotFound,
+			},
+			record: false,
+		},
+		{
+			name:  "метрика counter отсутствует в хранилище",
+			mType: "counter",
+			mName: "unknow",
+			expected: want{
+				code: http.StatusNotFound,
+			},
+			record: false,
 		},
 	}
 	for _, tt := range tests {
@@ -173,12 +195,14 @@ func TestGetMetricHandler(t *testing.T) {
 				Gauges:   make(map[string]float64),
 				Counters: make(map[string]int64),
 			}
-			if tt.mName != "" {
+			if tt.record {
 				switch tt.mType {
 				case "counter":
-					storage.SaveCounters(t.Context(), tt.mName, tt.valC)
+					err := storage.SaveCounters(t.Context(), tt.mName, tt.valC)
+					assert.NoError(t, err)
 				case "gauge":
-					storage.SaveGauges(t.Context(), tt.mName, tt.valG)
+					err := storage.SaveGauges(t.Context(), tt.mName, tt.valG)
+					assert.NoError(t, err)
 				}
 			}
 			logger := zaptest.NewLogger(t)
@@ -264,9 +288,11 @@ func TestExposeMetricHandler(t *testing.T) {
 			}
 			for _, name := range tt.mName {
 				if name == "PollCount" {
-					storage.SaveCounters(t.Context(), name, rand.Int64())
+					err := storage.SaveCounters(t.Context(), name, rand.Int64())
+					assert.NoError(t, err)
 				} else {
-					storage.SaveGauges(t.Context(), name, rand.Float64())
+					err := storage.SaveGauges(t.Context(), name, rand.Float64())
+					assert.NoError(t, err)
 				}
 			}
 			logger := zaptest.NewLogger(t)
