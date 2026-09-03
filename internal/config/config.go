@@ -78,7 +78,7 @@ func (n *NetAddress) UnmarshalText(adr []byte) error {
 func (n *NetAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
 	if len(hp) != 2 {
-		return errors.New("Need address in a form host:port")
+		return errors.New("need address in a form host:port")
 	}
 	port, err := strconv.Atoi(hp[1])
 	if err != nil {
