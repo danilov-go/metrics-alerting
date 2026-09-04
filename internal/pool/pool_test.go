@@ -21,7 +21,7 @@ func (rs *testStuctur) Reset() {
 	rs.str = ""
 }
 
-func TestPool_Lifecycle(t *testing.T) {
+func TestPool(t *testing.T) {
 	poolTest := New[testStuctur]()
 	test := poolTest.Get()
 	assert.NotNil(t, test)

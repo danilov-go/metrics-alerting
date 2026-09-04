@@ -8,7 +8,14 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/logger"
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
 func main() {
+	config.PrintBuild(buildVersion, buildDate, buildCommit)
 	configs := &config.ConfigAgent{
 		Net: config.NetAddress{
 			Host: "localhost",

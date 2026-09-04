@@ -17,7 +17,14 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
 func main() {
+	config.PrintBuild(buildVersion, buildDate, buildCommit)
 	var storage handler.Storage
 	configs := config.ConfigServer{
 		Net: config.NetAddress{

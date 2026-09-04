@@ -125,7 +125,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				return true
 			}
 			name := pass.Fset.Position(decl.Pos()).Filename
-			if strings.Contains(name, "go-build") {
+			if strings.Contains(name, "go-build") || (strings.Contains(name, "testdata") && !strings.HasSuffix(name, "analiz_test.go")) {
 				return true
 			}
 			if decl.Name.Name == "main" {

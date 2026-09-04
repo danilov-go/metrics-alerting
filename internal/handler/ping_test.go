@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-func TestMetricsHandler_PingHandler_Negative(t *testing.T) {
+func TestPingHandler(t *testing.T) {
 	logger := zaptest.NewLogger(t).Sugar()
 	cfg := repository.ConfigFile{
 		Path:     "",
