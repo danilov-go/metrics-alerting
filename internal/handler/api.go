@@ -6,27 +6,22 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"sync"
 
 	"net/http"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
+	"github.com/danilov-go/metrics-alerting.git/internal/pool"
 )
 
-var pool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
-}
+var poolBuf = pool.New[bytes.Buffer]()
 
 // APIUpdateHandler возвращает обработчик для обновления или создания одиночной метрики из JSON.
 func (h *MetricsHandler) APIUpdateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
-		buf := pool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer pool.Put(buf)
+		buf := poolBuf.Get()
+		defer poolBuf.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -95,9 +90,8 @@ func (h *MetricsHandler) APIValueHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
-		buf := pool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer pool.Put(buf)
+		buf := poolBuf.Get()
+		defer poolBuf.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -168,9 +162,8 @@ func (h *MetricsHandler) APIUpdatesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var metrics []models.Metrics
-		buf := pool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer pool.Put(buf)
+		buf := poolBuf.Get()
+		defer poolBuf.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)

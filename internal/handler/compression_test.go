@@ -23,19 +23,30 @@ func TestGzipMiddleware(t *testing.T) {
 	})
 	h := handler.GzipMiddleware(next)
 	tests := []struct {
-		name           string
-		acceptEncoding string
-		wantErr        bool
+		name            string
+		acceptEncoding  string
+		contentEncoding string
+		wantCode        int
+		wantErr         bool
 	}{
 		{
 			name:           "без сжатия ",
 			acceptEncoding: "",
+			wantCode:       http.StatusOK,
 			wantErr:        false,
 		},
 		{
 			name:           "со сжатием",
 			acceptEncoding: "gzip",
+			wantCode:       http.StatusOK,
 			wantErr:        true,
+		},
+		{
+			name:            "некорректный gzip",
+			acceptEncoding:  "",
+			contentEncoding: "gzip",
+			wantCode:        http.StatusInternalServerError,
+			wantErr:         false,
 		},
 	}
 	for _, tt := range tests {
@@ -44,20 +55,25 @@ func TestGzipMiddleware(t *testing.T) {
 			if tt.acceptEncoding != "" {
 				req.Header.Set("Accept-Encoding", tt.acceptEncoding)
 			}
+			if tt.contentEncoding != "" {
+				req.Header.Set("Content-Encoding", tt.contentEncoding)
+			}
 			res := httptest.NewRecorder()
 			h.ServeHTTP(res, req)
-			assert.Equal(t, http.StatusOK, res.Code)
-			if tt.wantErr {
-				assert.True(t, strings.Contains(res.Header().Get("Content-Encoding"), "gzip"))
-				zr, err := gzip.NewReader(res.Body)
-				require.NoError(t, err)
-				defer func() { _ = zr.Close() }()
-				uncompressedResult, err := io.ReadAll(zr)
-				require.NoError(t, err)
-				assert.Equal(t, body, string(uncompressedResult))
-			} else {
-				assert.NotContains(t, res.Header().Get("Content-Encoding"), "gzip")
-				assert.Equal(t, body, res.Body.String())
+			assert.Equal(t, tt.wantCode, res.Code)
+			if res.Code == http.StatusOK {
+				if tt.wantErr {
+					assert.True(t, strings.Contains(res.Header().Get("Content-Encoding"), "gzip"))
+					zr, err := gzip.NewReader(res.Body)
+					require.NoError(t, err)
+					defer func() { _ = zr.Close() }()
+					uncompressedResult, err := io.ReadAll(zr)
+					require.NoError(t, err)
+					assert.Equal(t, body, string(uncompressedResult))
+				} else {
+					assert.NotContains(t, res.Header().Get("Content-Encoding"), "gzip")
+					assert.Equal(t, body, res.Body.String())
+				}
 			}
 		})
 	}
