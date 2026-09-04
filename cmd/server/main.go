@@ -102,8 +102,8 @@ func main() {
 	r.Use(handler.GzipMiddleware)
 	r.Use(handler.HashMiddleware(configs.Key))
 	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
-	r.Post("/value", h.ApiValueHandler())
-	r.Post("/value/", h.ApiValueHandler())
+	r.Post("/value", h.APIValueHandler())
+	r.Post("/value/", h.APIValueHandler())
 	r.Get("/ping", h.PingHandler())
 	r.Get("/", h.ExposeMetricsHandler())
 	r.Group(func(r chi.Router) {
@@ -111,10 +111,10 @@ func main() {
 			r.Use(handler.AuditMiddleware(event))
 		}
 		r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
-		r.Post("/updates", h.ApiUpdatesHandler())
-		r.Post("/updates/", h.ApiUpdatesHandler())
-		r.Post("/update", h.ApiUpdateHandler())
-		r.Post("/update/", h.ApiUpdateHandler())
+		r.Post("/updates", h.APIUpdatesHandler())
+		r.Post("/updates/", h.APIUpdatesHandler())
+		r.Post("/update", h.APIUpdateHandler())
+		r.Post("/update/", h.APIUpdateHandler())
 	})
 	go func() {
 		if err := http.ListenAndServe(":8081", nil); err != nil {

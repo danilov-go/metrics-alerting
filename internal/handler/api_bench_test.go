@@ -18,11 +18,11 @@ const (
 	mVal = 123.45
 )
 
-func BenchmarkApiUpdateHandler(b *testing.B) {
+func BenchmarkAPIUpdateHandler(b *testing.B) {
 	logger := zaptest.NewLogger(b)
 	storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
 	h := NewMetricsHandler(storage, logger.Sugar())
-	handler := h.ApiUpdateHandler()
+	handler := h.APIUpdateHandler()
 	metric := models.Metrics{
 		ID:    mID,
 		MType: models.Gauge,
@@ -45,7 +45,7 @@ func BenchmarkApiValueHandler(b *testing.B) {
 	logger := zaptest.NewLogger(b)
 	storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
 	h := NewMetricsHandler(storage, logger.Sugar())
-	handler := h.ApiValueHandler()
+	handler := h.APIValueHandler()
 	ctx := b.Context()
 	err := storage.SaveGauges(ctx, mID, mVal)
 	assert.NoError(b, err)
@@ -70,7 +70,7 @@ func BenchmarkApiUpdatesHandler(b *testing.B) {
 	logger := zaptest.NewLogger(b)
 	storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
 	h := NewMetricsHandler(storage, logger.Sugar())
-	handler := h.ApiUpdatesHandler()
+	handler := h.APIUpdatesHandler()
 	metrics := []models.Metrics{
 		{ID: mID, MType: models.Gauge, Value: models.PointerFloat64(mVal)},
 		{ID: "CPUutilization1", MType: models.Gauge, Value: models.PointerFloat64(38.88)},
