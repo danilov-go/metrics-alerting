@@ -80,7 +80,7 @@ func (h *MetricsHandler) GetMetricHandler() http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "%v", val)
+			_, _ = fmt.Fprintf(w, "%v", val)
 		case models.Counter:
 			val, err := h.storage.GetCounters(ctx, mName)
 			if err != nil {
@@ -90,7 +90,7 @@ func (h *MetricsHandler) GetMetricHandler() http.HandlerFunc {
 			}
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprintf(w, "%v", val)
+			_, _ = fmt.Fprintf(w, "%v", val)
 		default:
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 			return
@@ -121,10 +121,10 @@ func (h *MetricsHandler) ExposeMetricsHandler() http.HandlerFunc {
 		}
 		w.WriteHeader(http.StatusOK)
 		for name, val := range mapGauge {
-			fmt.Fprintf(w, "%v : %v<br>\n", name, val)
+			_, _ = fmt.Fprintf(w, "%v : %v<br>\n", name, val)
 		}
 		for name, val := range mapCounter {
-			fmt.Fprintf(w, "%v : %v<br>\n", name, val)
+			_, _ = fmt.Fprintf(w, "%v : %v<br>\n", name, val)
 		}
 	}
 }

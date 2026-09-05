@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap/zaptest"
 )
 
-func TestApiUpdateHandler(t *testing.T) {
+func TestAPIUpdateHandler(t *testing.T) {
 	type metricExpected struct {
 		mType string
 		name  string
@@ -28,14 +28,16 @@ func TestApiUpdateHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		storage  *repository.MemStorage
-		m        models.Metrics
-		rawBody  string
-		expected want
+		name        string
+		contentType string
+		storage     *repository.MemStorage
+		m           models.Metrics
+		rawBody     string
+		expected    want
 	}{
 		{
-			name: "положительный тест gauge",
+			name:        "положительный тест gauge",
+			contentType: "application/json",
 			m: models.Metrics{
 				ID:    "Alloc",
 				MType: models.Gauge,
@@ -51,7 +53,8 @@ func TestApiUpdateHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "положительный тест counter",
+			name:        "положительный тест counter",
+			contentType: "application/json",
 			m: models.Metrics{
 				ID:    "PollCount",
 				MType: models.Counter,
@@ -67,7 +70,8 @@ func TestApiUpdateHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "пустое имя метрики ID",
+			name:        "пустое имя метрики ID",
+			contentType: "application/json",
 			m: models.Metrics{
 				ID:    "",
 				MType: models.Gauge,
@@ -78,7 +82,8 @@ func TestApiUpdateHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "неверный тип метрики",
+			name:        "неверный тип метрики",
+			contentType: "application/json",
 			m: models.Metrics{
 				ID:    "Alloc",
 				MType: "invalid_type",
@@ -89,8 +94,41 @@ func TestApiUpdateHandler(t *testing.T) {
 			},
 		},
 		{
-			name:    "некорректный JSON",
-			rawBody: "{error json}",
+			name:        "некорректный JSON",
+			contentType: "application/json",
+			rawBody:     "{error json}",
+			expected: want{
+				code: http.StatusBadRequest,
+			},
+		},
+		{
+			name:        "отсутствует value",
+			contentType: "application/json",
+			m: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+				Value: nil,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+		},
+		{
+			name:        "отсутствует delta",
+			contentType: "application/json",
+			m: models.Metrics{
+				ID:    "PollCount",
+				MType: models.Counter,
+				Delta: nil,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+		},
+		{
+			name:        "неверный Content-Type",
+			rawBody:     "[]",
+			contentType: "text/plain",
 			expected: want{
 				code: http.StatusBadRequest,
 			},
@@ -105,7 +143,7 @@ func TestApiUpdateHandler(t *testing.T) {
 			logger := zaptest.NewLogger(t)
 			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Post("/update", h.ApiUpdateHandler())
+			r.Post("/update", h.APIUpdateHandler())
 			var body []byte
 			var err error
 			if tt.rawBody != "" {
@@ -116,7 +154,7 @@ func TestApiUpdateHandler(t *testing.T) {
 			}
 			buf := bytes.NewBuffer(body)
 			request := httptest.NewRequest(http.MethodPost, "/update", buf)
-			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Content-Type", tt.contentType)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
 			assert.Equal(t, tt.expected.code, w.Code)
@@ -134,7 +172,7 @@ func TestApiUpdateHandler(t *testing.T) {
 	}
 }
 
-func TestApiValueHandler(t *testing.T) {
+func TestAPIValueHandler(t *testing.T) {
 	type want struct {
 		code  int
 		mType string
@@ -143,9 +181,11 @@ func TestApiValueHandler(t *testing.T) {
 		valC  int64
 	}
 	tests := []struct {
-		name     string
-		m        models.Metrics
-		expected want
+		name        string
+		rawBody     string
+		m           models.Metrics
+		expected    want
+		contentType string
 	}{
 		{
 			name: "положительный тест gauge",
@@ -159,6 +199,7 @@ func TestApiValueHandler(t *testing.T) {
 				mName: "Alloc",
 				valG:  123.45,
 			},
+			contentType: "application/json",
 		},
 		{
 			name: "положительный тест counter",
@@ -172,6 +213,7 @@ func TestApiValueHandler(t *testing.T) {
 				mName: "PollCount",
 				valC:  15,
 			},
+			contentType: "application/json",
 		},
 		{
 			name: "неверный тип метрики",
@@ -182,6 +224,7 @@ func TestApiValueHandler(t *testing.T) {
 			expected: want{
 				code: http.StatusBadRequest,
 			},
+			contentType: "application/json",
 		},
 		{
 			name: "пустое имя метрики",
@@ -191,6 +234,48 @@ func TestApiValueHandler(t *testing.T) {
 			},
 			expected: want{
 				code: http.StatusNotFound,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "неверный Content-Type",
+			m: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+			},
+			expected: want{
+				code: http.StatusBadRequest,
+			},
+			contentType: "text/plain",
+		},
+		{
+			name: "метрика gauge отсутствует в хранилище",
+			m: models.Metrics{
+				ID:    "unknow",
+				MType: models.Gauge,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "метрика counter отсутствует в хранилище",
+			m: models.Metrics{
+				ID:    "unknow",
+				MType: models.Counter,
+			},
+			expected: want{
+				code: http.StatusNotFound,
+			},
+			contentType: "application/json",
+		},
+		{
+			name:        "некорректный JSON",
+			rawBody:     "{error json}",
+			contentType: "application/json",
+			expected: want{
+				code: http.StatusBadRequest,
 			},
 		},
 	}
@@ -203,20 +288,30 @@ func TestApiValueHandler(t *testing.T) {
 			if tt.expected.mName != "" {
 				switch tt.expected.mType {
 				case models.Counter:
-					storage.SaveCounters(t.Context(), tt.expected.mName, tt.expected.valC)
+					err := storage.SaveCounters(t.Context(), tt.expected.mName, tt.expected.valC)
+					assert.NoError(t, err)
 				case models.Gauge:
-					storage.SaveGauges(t.Context(), tt.expected.mName, tt.expected.valG)
+					err := storage.SaveGauges(t.Context(), tt.expected.mName, tt.expected.valG)
+					assert.NoError(t, err)
 				}
 			}
 			logger := zaptest.NewLogger(t)
 			h := handler.NewMetricsHandler(storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Post("/value", h.ApiValueHandler())
-			body, err := json.Marshal(tt.m)
+			r.Post("/value", h.APIValueHandler())
+			var body []byte
+			var err error
+			if tt.rawBody != "" {
+				body = []byte(tt.rawBody)
+			} else {
+				body, err = json.Marshal(tt.m)
+				assert.NoError(t, err)
+			}
+
 			assert.NoError(t, err)
 			buf := bytes.NewBuffer(body)
 			request := httptest.NewRequest(http.MethodPost, "/value", buf)
-			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Content-Type", tt.contentType)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
 			assert.Equal(t, tt.expected.code, w.Code)
@@ -237,7 +332,7 @@ func TestApiValueHandler(t *testing.T) {
 	}
 }
 
-func TestApiUpdatesHandler(t *testing.T) {
+func TestAPIUpdatesHandler(t *testing.T) {
 	type metricExpected struct {
 		mType string
 		name  string
@@ -250,11 +345,12 @@ func TestApiUpdatesHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		storage  *repository.MemStorage
-		m        models.Metrics
-		rawBody  string
-		expected want
+		name        string
+		storage     *repository.MemStorage
+		m           models.Metrics
+		contentType string
+		rawBody     string
+		expected    want
 	}{
 		{
 			name: "положительный тест gauge",
@@ -263,6 +359,7 @@ func TestApiUpdatesHandler(t *testing.T) {
 				MType: models.Gauge,
 				Value: models.PointerFloat64(123.45),
 			},
+			contentType: "application/json",
 			expected: want{
 				mExp: metricExpected{
 					mType: models.Gauge,
@@ -279,6 +376,7 @@ func TestApiUpdatesHandler(t *testing.T) {
 				MType: models.Counter,
 				Delta: models.PointerInt64(15),
 			},
+			contentType: "application/json",
 			expected: want{
 				mExp: metricExpected{
 					mType: models.Counter,
@@ -295,15 +393,49 @@ func TestApiUpdatesHandler(t *testing.T) {
 				MType: "invalid_type",
 				Value: models.PointerFloat64(123.45),
 			},
+			contentType: "application/json",
 			expected: want{
 				code: http.StatusBadRequest,
 			},
 		},
 		{
-			name:    "некорректный JSON",
-			rawBody: "{error json}",
+			name:        "некорректный JSON",
+			rawBody:     "{error json}",
+			contentType: "application/json",
 			expected: want{
 				code: http.StatusBadRequest,
+			},
+		},
+		{
+			name:        "неверный Content-Type",
+			rawBody:     "[]",
+			contentType: "text/plain",
+			expected: want{
+				code: http.StatusBadRequest,
+			},
+		},
+		{
+			name: "пустой Delta",
+			m: models.Metrics{
+				ID:    "PollCount",
+				MType: models.Counter,
+				Delta: nil,
+			},
+			contentType: "application/json",
+			expected: want{
+				code: http.StatusInternalServerError,
+			},
+		},
+		{
+			name: "пустой Value",
+			m: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+				Value: nil,
+			},
+			contentType: "application/json",
+			expected: want{
+				code: http.StatusInternalServerError,
 			},
 		},
 	}
@@ -316,7 +448,7 @@ func TestApiUpdatesHandler(t *testing.T) {
 			logger := zaptest.NewLogger(t)
 			h := handler.NewMetricsHandler(tt.storage, logger.Sugar())
 			r := chi.NewRouter()
-			r.Post("/updates", h.ApiUpdatesHandler())
+			r.Post("/updates", h.APIUpdatesHandler())
 			var body []byte
 			var err error
 			if tt.rawBody != "" {
@@ -327,7 +459,7 @@ func TestApiUpdatesHandler(t *testing.T) {
 			}
 			buf := bytes.NewBuffer(body)
 			request := httptest.NewRequest(http.MethodPost, "/updates", buf)
-			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Content-Type", tt.contentType)
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, request)
 			assert.Equal(t, tt.expected.code, w.Code)

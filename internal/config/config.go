@@ -78,7 +78,7 @@ func (n *NetAddress) UnmarshalText(adr []byte) error {
 func (n *NetAddress) Set(s string) error {
 	hp := strings.Split(s, ":")
 	if len(hp) != 2 {
-		return errors.New("Need address in a form host:port")
+		return errors.New("need address in a form host:port")
 	}
 	port, err := strconv.Atoi(hp[1])
 	if err != nil {
@@ -179,4 +179,10 @@ func (a *ConfigAgent) Get() {
 		fmt.Println("pollInterval не может быть больше reportInterval")
 		os.Exit(1)
 	}
+}
+
+func PrintBuild(version, date, commit string) {
+	fmt.Printf("Build version: %s\n", version)
+	fmt.Printf("Build date: %s\n", date)
+	fmt.Printf("Build commit: %s\n", commit)
 }
