@@ -11,11 +11,16 @@ type Pool[T any, P Reseter[T]] struct {
 	p sync.Pool
 }
 
-func New[T any, P Reseter[T]]() Pool[T, P] {
-	return Pool[T, P]{
+func New[T any, P Reseter[T]](newFunc func() P) *Pool[T, P] {
+	if newFunc == nil {
+		newFunc = func() P {
+			return new(T)
+		}
+	}
+	return &Pool[T, P]{
 		p: sync.Pool{
 			New: func() any {
-				return new(T)
+				return newFunc()
 			},
 		},
 	}

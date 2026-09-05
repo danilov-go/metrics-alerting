@@ -182,14 +182,7 @@ func (a *ConfigAgent) Get() {
 }
 
 func PrintBuild(version, date, commit string) {
-	fmt.Printf("Build version: %s\n", getValue(version))
-	fmt.Printf("Build date: %s\n", getValue(date))
-	fmt.Printf("Build commit: %s\n", getValue(commit))
-}
-
-func getValue(s string) string {
-	if s == "" {
-		return "N/A"
-	}
-	return s
+	fmt.Printf("Build version: %s\n", version)
+	fmt.Printf("Build date: %s\n", date)
+	fmt.Printf("Build commit: %s\n", commit)
 }

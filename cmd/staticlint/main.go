@@ -119,29 +119,29 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		return nil, nil
 	}
 	for _, file := range pass.Files {
+		name := pass.Fset.Position(file.Pos()).Filename
+		if strings.Contains(name, "go-build") || (strings.Contains(name, "testdata") && !strings.HasSuffix(name, "analiz_test.go")) {
+			continue
+		}
 		ast.Inspect(file, func(node ast.Node) bool {
-			decl, ok := node.(*ast.FuncDecl)
+			if decl, ok := node.(*ast.FuncDecl); ok {
+				if decl.Name.Name == "main" {
+					return true
+				} else {
+					return false
+				}
+			}
+			call, ok := node.(*ast.CallExpr)
 			if !ok {
 				return true
 			}
-			name := pass.Fset.Position(decl.Pos()).Filename
-			if strings.Contains(name, "go-build") || (strings.Contains(name, "testdata") && !strings.HasSuffix(name, "analiz_test.go")) {
+			selector, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || selector.Sel.Name != "Exit" {
 				return true
 			}
-			if decl.Name.Name == "main" {
-				ast.Inspect(decl.Body, func(innerNode ast.Node) bool {
-					if call, ok := innerNode.(*ast.CallExpr); ok {
-						if selector, ok := call.Fun.(*ast.SelectorExpr); ok {
-							if ident, ok := selector.X.(*ast.Ident); ok {
-								if ident.Name == "os" && selector.Sel.Name == "Exit" {
-									pass.Reportf(call.Pos(), "обнаружен вызов os.Exit")
-								}
-							}
-						}
-					}
-					return true
-				})
-				return false
+			obj := pass.TypesInfo.Uses[selector.Sel]
+			if obj.Pkg().Path() == "os" {
+				pass.Reportf(call.Pos(), "обнаружен вызов os.Exit")
 			}
 			return true
 		})

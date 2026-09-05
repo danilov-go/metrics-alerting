@@ -22,19 +22,53 @@ func (rs *testStuctur) Reset() {
 }
 
 func TestPool(t *testing.T) {
-	poolTest := New[testStuctur]()
-	test := poolTest.Get()
-	assert.NotNil(t, test)
-	assert.Equal(t, 0, test.value)
-	assert.Equal(t, 0.0, test.float)
-	assert.Equal(t, "", test.str)
-	test.value = 10
-	test.float = 123.45
-	test.str = "test"
-	poolTest.Put(test)
-	testZero := poolTest.Get()
-	assert.NotNil(t, testZero)
-	assert.Equal(t, 0, testZero.value)
-	assert.Equal(t, 0.0, testZero.float)
-	assert.Equal(t, "", testZero.str)
+	zeroStructur := testStuctur{
+		value: 0,
+		float: 0,
+		str:   "",
+	}
+	tests := []struct {
+		name         string
+		factory      func() *testStuctur
+		wantStructur testStuctur
+	}{
+		{
+			name:         "передача nil функции-инициализатора",
+			factory:      nil,
+			wantStructur: zeroStructur,
+		},
+		{
+			name: "передача заданной функции-инициализатора",
+			factory: func() *testStuctur {
+				return &testStuctur{
+					value: 10,
+					float: 123.45,
+					str:   "test",
+				}
+			},
+			wantStructur: testStuctur{
+				value: 10,
+				float: 123.45,
+				str:   "test",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			poolTest := New[testStuctur](tt.factory)
+			var test *testStuctur
+			assert.NotPanics(t, func() {
+				test = poolTest.Get()
+			})
+			assert.NotNil(t, test)
+			assert.Equal(t, tt.wantStructur, *test)
+			test.value = 15
+			test.float = 223.45
+			test.str = "testPut"
+			poolTest.Put(test)
+			testZero := poolTest.Get()
+			assert.NotNil(t, testZero)
+			assert.Equal(t, zeroStructur, *testZero)
+		})
+	}
 }

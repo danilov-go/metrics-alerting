@@ -13,7 +13,9 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/pool"
 )
 
-var poolBuf = pool.New[bytes.Buffer]()
+var poolBuf = pool.New(func() *bytes.Buffer {
+	return &bytes.Buffer{}
+})
 
 // APIUpdateHandler возвращает обработчик для обновления или создания одиночной метрики из JSON.
 func (h *MetricsHandler) APIUpdateHandler() http.HandlerFunc {

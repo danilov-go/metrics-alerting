@@ -220,7 +220,7 @@ func (d *storageDB) SaveAll(ctx context.Context, metrics []models.Metrics) error
 		return err
 	}
 	defer func() {
-		_ = stmtCounter.Close()
+		_ = stmtGauge.Close()
 	}()
 	for _, m := range metrics {
 		switch m.MType {
