@@ -17,23 +17,35 @@ func TestMemStorage_SaveGauges(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
 	tests := []struct {
-		name  string
-		mName string
-		mVal  float64
+		name       string
+		mName      string
+		mVal       float64
+		nilStorage bool
 	}{
 		{
-			name:  "положительный тест",
-			mName: "Alloc",
-			mVal:  123.45,
+			name:       "положительный тест",
+			mName:      "Alloc",
+			mVal:       123.45,
+			nilStorage: false,
 		},
 		{
-			name:  "обновление метрики",
-			mName: "Alloc",
-			mVal:  223.45,
+			name:       "обновление метрики",
+			mName:      "Alloc",
+			mVal:       223.45,
+			nilStorage: false,
+		},
+		{
+			name:       "nil мапа",
+			mName:      "Alloc",
+			mVal:       123.45,
+			nilStorage: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.nilStorage {
+				storage.Gauges = nil
+			}
 			err := storage.SaveGauges(ctx, tt.mName, tt.mVal)
 			assert.NoError(t, err)
 			val, ok := storage.Gauges[tt.mName]
@@ -48,26 +60,39 @@ func TestMemStorage_SaveCounters(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
 	tests := []struct {
-		name   string
-		mName  string
-		mVal   int64
-		expVal int64
+		name       string
+		mName      string
+		mVal       int64
+		expVal     int64
+		nilStorage bool
 	}{
 		{
-			name:   "положительный тест",
-			mName:  "PollCount",
-			mVal:   5,
-			expVal: 5,
+			name:       "положительный тест",
+			mName:      "PollCount",
+			mVal:       5,
+			expVal:     5,
+			nilStorage: false,
 		},
 		{
-			name:   "обновление метрики",
-			mName:  "PollCount",
-			mVal:   5,
-			expVal: 10,
+			name:       "обновление метрики",
+			mName:      "PollCount",
+			mVal:       5,
+			expVal:     10,
+			nilStorage: false,
+		},
+		{
+			name:       "nil мапа",
+			mName:      "TestPollCount",
+			mVal:       3,
+			expVal:     3,
+			nilStorage: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.nilStorage {
+				storage.Counters = nil
+			}
 			err := storage.SaveCounters(ctx, tt.mName, tt.mVal)
 			assert.NoError(t, err)
 			val, ok := storage.Counters[tt.mName]
@@ -81,34 +106,51 @@ func TestMemStorage_SaveCounters(t *testing.T) {
 func TestMemStorage_GetGauges(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
-	storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
+
 	tests := []struct {
-		name    string
-		mName   string
-		mVal    float64
-		wantErr error
+		name       string
+		mName      string
+		mVal       float64
+		wantErr    error
+		nilStorage bool
 	}{
 		{
-			name:    "отсутствие метрик",
-			mName:   "Alloc",
-			mVal:    0,
-			wantErr: sql.ErrNoRows,
+			name:       "отсутствие метрик",
+			mName:      "Alloc",
+			mVal:       0,
+			wantErr:    sql.ErrNoRows,
+			nilStorage: false,
 		},
 		{
-			name:    "положительный тест",
-			mName:   "Alloc",
-			mVal:    123.45,
-			wantErr: nil,
+			name:       "положительный тест",
+			mName:      "Alloc",
+			mVal:       123.45,
+			wantErr:    nil,
+			nilStorage: false,
+		},
+		{
+			name:       "nil мапа",
+			mName:      "Alloc",
+			mVal:       0,
+			wantErr:    sql.ErrNoRows,
+			nilStorage: true,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.wantErr == nil {
+			var storage *repository.MemStorage
+			if tt.nilStorage {
+				storage = &repository.MemStorage{}
+			} else {
+				storage = repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
+			}
+			if tt.wantErr == nil && !tt.nilStorage {
 				err := storage.SaveGauges(ctx, tt.mName, tt.mVal)
 				assert.NoError(t, err)
 			}
 			val, err := storage.GetGauges(ctx, tt.mName)
-			assert.Equal(t, tt.wantErr, err)
+			assert.ErrorIs(t, err, tt.wantErr)
 			assert.Equal(t, tt.mVal, val)
 		})
 	}
@@ -117,29 +159,44 @@ func TestMemStorage_GetGauges(t *testing.T) {
 func TestMemStorage_GetCounters(t *testing.T) {
 	ctx := context.Background()
 	logger := zaptest.NewLogger(t)
-	storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
 	tests := []struct {
-		name    string
-		mName   string
-		mVal    int64
-		wantErr error
+		name       string
+		mName      string
+		mVal       int64
+		wantErr    error
+		nilStorage bool
 	}{
 		{
-			name:    "отсутствие метрик",
-			mName:   "PollCount",
-			mVal:    0,
-			wantErr: sql.ErrNoRows,
+			name:       "отсутствие метрик",
+			mName:      "PollCount",
+			mVal:       0,
+			wantErr:    sql.ErrNoRows,
+			nilStorage: false,
 		},
 		{
-			name:    "положительный тест",
-			mName:   "PollCount",
-			mVal:    5,
-			wantErr: nil,
+			name:       "положительный тест",
+			mName:      "PollCount",
+			mVal:       5,
+			wantErr:    nil,
+			nilStorage: false,
+		},
+		{
+			name:       "nil мапа",
+			mName:      "PollCount",
+			mVal:       0,
+			wantErr:    sql.ErrNoRows,
+			nilStorage: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.wantErr == nil {
+			var storage *repository.MemStorage
+			if tt.nilStorage {
+				storage = &repository.MemStorage{}
+			} else {
+				storage = repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
+			}
+			if tt.wantErr == nil && !tt.nilStorage {
 				err := storage.SaveCounters(ctx, tt.mName, tt.mVal)
 				assert.NoError(t, err)
 			}
@@ -160,6 +217,7 @@ func TestMemStorage_SaveAll(t *testing.T) {
 		errMsg       string
 		wantGauges   map[string]float64
 		wantCounters map[string]int64
+		nilStorage   bool
 	}{
 		{
 			name: "положительный тест",
@@ -190,36 +248,57 @@ func TestMemStorage_SaveAll(t *testing.T) {
 			wantCounters: map[string]int64{
 				"PollCount": 5,
 			},
+			nilStorage: false,
 		},
 		{
 			name: "пустой delta",
 			metricsExp: []models.Metrics{
 				{ID: "PollCount", MType: models.Counter, Delta: nil},
 			},
-			wantErr: true,
-			errMsg:  "переменная delta пустая",
+			wantErr:    true,
+			errMsg:     "переменная delta пустая",
+			nilStorage: false,
 		},
 		{
 			name: "пустой value",
 			metricsExp: []models.Metrics{
 				{ID: "Alloc", MType: models.Gauge, Value: nil},
 			},
-			wantErr: true,
-			errMsg:  "переменная value пустая",
+			wantErr:    true,
+			errMsg:     "переменная value пустая",
+			nilStorage: false,
 		},
 		{
 			name: "неизвестный тип",
 			metricsExp: []models.Metrics{
 				{ID: "unknown", MType: "unknown"},
 			},
-			wantErr: true,
-			errMsg:  "неизвестный тип метрики",
+			wantErr:    true,
+			errMsg:     "неизвестный тип метрики",
+			nilStorage: false,
+		},
+		{
+			name: "nil мапа",
+			metricsExp: []models.Metrics{
+				{ID: "Alloc", MType: models.Gauge, Value: models.PointerFloat64(123.45)},
+				{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(5)},
+			},
+			wantErr: false,
+			wantGauges: map[string]float64{
+				"Alloc": 123.45,
+			},
+			wantCounters: map[string]int64{
+				"PollCount": 5,
+			},
+			nilStorage: true,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			storage := repository.InitMemStorage(repository.ConfigFile{}, logger.Sugar())
+			if tt.nilStorage {
+				storage = &repository.MemStorage{}
+			}
 			err := storage.SaveAll(ctx, tt.metricsExp)
 			if tt.wantErr {
 				assert.Error(t, err)

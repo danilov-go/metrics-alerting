@@ -64,30 +64,30 @@ func InitMemStorage(cfg ConfigFile, l log) *MemStorage {
 }
 
 // SaveGauges сохраняет или перезаписывает метрику типа "gauge".
-func (g *MemStorage) SaveGauges(ctx context.Context, name string, value float64) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.Gauges == nil {
-		g.Gauges = make(map[string]float64)
+func (m *MemStorage) SaveGauges(ctx context.Context, name string, value float64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Gauges == nil {
+		m.Gauges = make(map[string]float64)
 	}
-	g.Gauges[name] = value
+	m.Gauges[name] = value
 	return nil
 }
 
 // SaveCounters сохраняет или обновляет метрику типа "counter".
-func (c *MemStorage) SaveCounters(ctx context.Context, name string, value int64) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.Counters == nil {
-		c.Counters = make(map[string]int64)
+func (m *MemStorage) SaveCounters(ctx context.Context, name string, value int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.Counters == nil {
+		m.Counters = make(map[string]int64)
 	}
-	if val, ok := c.Counters[name]; ok {
-		c.Counters[name] = value + val
+	if val, ok := m.Counters[name]; ok {
+		m.Counters[name] = value + val
 	} else {
-		c.Counters[name] = value
+		m.Counters[name] = value
 	}
-	if c.interval == 0 {
-		if err := c.save(); err != nil {
+	if m.interval == 0 {
+		if err := m.save(); err != nil {
 			return err
 		}
 	}
@@ -95,13 +95,13 @@ func (c *MemStorage) SaveCounters(ctx context.Context, name string, value int64)
 }
 
 // GetGauges возвращает значение метрики типа "gauge" по её названию.
-func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	if g.Gauges == nil {
-		g.Gauges = make(map[string]float64)
+func (m *MemStorage) GetGauges(ctx context.Context, name string) (float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.Gauges == nil {
+		m.Gauges = make(map[string]float64)
 	}
-	val, ok := g.Gauges[name]
+	val, ok := m.Gauges[name]
 	if !ok {
 		return 0, sql.ErrNoRows
 	}
@@ -109,13 +109,13 @@ func (g *MemStorage) GetGauges(ctx context.Context, name string) (float64, error
 }
 
 // GetCounters возвращает значение метрики типа "counter" по её названию.
-func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	if c.Counters == nil {
-		c.Counters = make(map[string]int64)
+func (m *MemStorage) GetCounters(ctx context.Context, name string) (int64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.Counters == nil {
+		m.Counters = make(map[string]int64)
 	}
-	val, ok := c.Counters[name]
+	val, ok := m.Counters[name]
 	if !ok {
 		return 0, sql.ErrNoRows
 	}
@@ -123,20 +123,20 @@ func (c *MemStorage) GetCounters(ctx context.Context, name string) (int64, error
 }
 
 // GetAllGauges возвращает map всех хранящихся метрик типа "gauge".
-func (g *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, error) {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	gauges := make(map[string]float64, len(g.Gauges))
-	maps.Copy(gauges, g.Gauges)
+func (m *MemStorage) GetAllGauges(ctx context.Context) (map[string]float64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	gauges := make(map[string]float64, len(m.Gauges))
+	maps.Copy(gauges, m.Gauges)
 	return gauges, nil
 }
 
 // GetAllCounters возвращает map всех хранящихся метрик типа "counter".
-func (c *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, error) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	counters := make(map[string]int64, len(c.Counters))
-	maps.Copy(counters, c.Counters)
+func (m *MemStorage) GetAllCounters(ctx context.Context) (map[string]int64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	counters := make(map[string]int64, len(m.Counters))
+	maps.Copy(counters, m.Counters)
 	return counters, nil
 }
 
@@ -201,7 +201,7 @@ func (m *MemStorage) save() error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	buf := bufio.NewWriter(file)
 	err = json.NewEncoder(buf).Encode(m)
 	if err != nil {
@@ -218,7 +218,7 @@ func (m *MemStorage) loadFile(path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	buf := bufio.NewReader(file)
 	err = json.NewDecoder(buf).Decode(m)
 	if err != nil {

@@ -56,10 +56,10 @@ func HashMiddleware(key string) func(http.Handler) http.Handler {
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return
 			}
-			r.Body.Close()
+			_ = r.Body.Close()
 			r.Body = io.NopCloser(bytes.NewReader(body))
 			hs := hmac.New(sha256.New, []byte(key))
-			hs.Write(body)
+			_, _ = hs.Write(body)
 			hash := hs.Sum(nil)
 			if !hmac.Equal(hash, expectedHash) {
 				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)

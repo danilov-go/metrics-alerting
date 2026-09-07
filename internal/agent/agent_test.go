@@ -69,7 +69,7 @@ func TestAgent_Run(t *testing.T) {
 		var buf bytes.Buffer
 		wg, err := gzip.NewReader(r.Body)
 		assert.NoError(t, err)
-		defer wg.Close()
+		defer func() { _ = wg.Close() }()
 		_, err = buf.ReadFrom(wg)
 		assert.NoError(t, err)
 		err = json.Unmarshal(buf.Bytes(), &metric)

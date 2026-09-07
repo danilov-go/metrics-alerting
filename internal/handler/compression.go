@@ -89,7 +89,7 @@ func GzipMiddleware(h http.Handler) http.Handler {
 				return
 			}
 			r.Body = cr
-			defer cr.Close()
+			defer func() { _ = cr.Close() }()
 		}
 		acceptEncoding := r.Header.Get("Accept-Encoding")
 		supportsGzip := strings.Contains(acceptEncoding, "gzip")
@@ -99,7 +99,7 @@ func GzipMiddleware(h http.Handler) http.Handler {
 			cw := newCompressWriter(w, zw)
 			ow = cw
 			defer func() {
-				cw.Close()
+				_ = cw.Close()
 				poolGzip.Put(zw)
 			}()
 		}

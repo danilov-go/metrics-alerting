@@ -6,27 +6,24 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"sync"
 
 	"net/http"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
+	"github.com/danilov-go/metrics-alerting.git/internal/pool"
 )
 
-var pool = sync.Pool{
-	New: func() interface{} {
-		return new(bytes.Buffer)
-	},
-}
+var poolBuf = pool.New(func() *bytes.Buffer {
+	return &bytes.Buffer{}
+})
 
-// ApiUpdateHandler возвращает обработчик для обновления или создания одиночной метрики из JSON.
-func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
+// APIUpdateHandler возвращает обработчик для обновления или создания одиночной метрики из JSON.
+func (h *MetricsHandler) APIUpdateHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
-		buf := pool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer pool.Put(buf)
+		buf := poolBuf.Get()
+		defer poolBuf.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -83,18 +80,20 @@ func (h *MetricsHandler) ApiUpdateHandler() http.HandlerFunc {
 			h.logger.Errorw("ошибка сериализации", "error", err)
 			return
 		}
-		w.Write(buf.Bytes())
+		_, err := w.Write(buf.Bytes())
+		if err != nil {
+			h.logger.Errorw("ошибка записи ответа", "error", err)
+		}
 	}
 }
 
-// ApiValueHandler возвращает обработчик для получения текущего значения метрики по её типу и названию.
-func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
+// APIValueHandler возвращает обработчик для получения текущего значения метрики по её типу и названию.
+func (h *MetricsHandler) APIValueHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var m models.Metrics
-		buf := pool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer pool.Put(buf)
+		buf := poolBuf.Get()
+		defer poolBuf.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -153,18 +152,20 @@ func (h *MetricsHandler) ApiValueHandler() http.HandlerFunc {
 			h.logger.Errorw("ошибка сериализации", "error", err)
 			return
 		}
-		w.Write(buf.Bytes())
+		_, err := w.Write(buf.Bytes())
+		if err != nil {
+			h.logger.Errorw("ошибка записи ответа", "error", err)
+		}
 	}
 }
 
-// ApiUpdatesHandler возвращает обработчик для пакетного сохранения метрик.
-func (h *MetricsHandler) ApiUpdatesHandler() http.HandlerFunc {
+// APIUpdatesHandler возвращает обработчик для пакетного сохранения метрик.
+func (h *MetricsHandler) APIUpdatesHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		var metrics []models.Metrics
-		buf := pool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer pool.Put(buf)
+		buf := poolBuf.Get()
+		defer poolBuf.Put(buf)
 		if !strings.Contains(r.Header.Get("Content-Type"), "application/json") {
 			h.logger.Errorw("неверный контент тип", "Content-Type", r.Header.Get("Content-Type"))
 			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -200,6 +201,9 @@ func (h *MetricsHandler) ApiUpdatesHandler() http.HandlerFunc {
 			h.logger.Errorw("ошибка сериализации", "error", err)
 			return
 		}
-		w.Write(buf.Bytes())
+		_, err = w.Write(buf.Bytes())
+		if err != nil {
+			h.logger.Errorw("ошибка записи ответа", "error", err)
+		}
 	}
 }
