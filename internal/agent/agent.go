@@ -4,6 +4,7 @@ package agent
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -46,17 +47,17 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 }
 
 // Run запускает процесс сбора и отправки метрик на сервер.
-func (a *Agent) Run(ctx context.Context) {
+func (a *Agent) Run(ctx context.Context, publicKey *rsa.PublicKey) {
 	var wg sync.WaitGroup
 	gopsutilChan := a.getGopsutil(ctx, &wg)
 	runtimeChan := a.getRuntime(ctx, &wg)
 	metricChan := a.merge(ctx, &wg, gopsutilChan, runtimeChan)
-	a.worker(ctx, &wg, metricChan)
+	a.worker(ctx, &wg, metricChan, publicKey)
 	<-ctx.Done()
 	wg.Wait()
 }
 
-func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan []models.Metrics) {
+func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan []models.Metrics, publicKey *rsa.PublicKey) {
 	for i := 0; i < a.rateLimit; i++ {
 		wg.Add(1)
 		go func() {
@@ -65,7 +66,7 @@ func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan
 				if len(ch) == 0 {
 					continue
 				}
-				a.send(ctx, ch)
+				a.send(ctx, ch, publicKey)
 			}
 		}()
 	}

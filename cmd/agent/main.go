@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/agent"
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
@@ -26,13 +27,22 @@ func main() {
 		Key:            "",
 		RateLimit:      3,
 	}
-	configs.Get()
+	if err := configs.Get(); err != nil {
+		panic(err)
+	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
+	}
+	var publicKey *rsa.PublicKey
+	var errC error
+	if configs.CryptoKey != "" {
+		if publicKey, errC = configs.GetKey(); errC != nil {
+			panic(errC)
+		}
 	}
 	logger.Log.Sugar().Info("Key", configs.Key)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	client := agent.New(*configs, logger.Log.Sugar())
-	client.Run(ctx)
+	client.Run(ctx, publicKey)
 }

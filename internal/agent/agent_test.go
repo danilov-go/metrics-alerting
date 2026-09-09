@@ -108,7 +108,7 @@ func TestAgent_Run(t *testing.T) {
 	assert.NoError(t, err)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(t.Context())
-	go a.Run(ctx)
+	go a.Run(ctx, nil)
 	time.Sleep(3 * time.Second)
 	cancel()
 	wg.Wait()

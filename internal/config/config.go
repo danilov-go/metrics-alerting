@@ -2,6 +2,9 @@
 package config
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +31,8 @@ type ConfigAgent struct {
 	ReportInterval int `env:"REPORT_INTERVAL"`
 	// Key содержит ключ для подписи данных.
 	Key string `env:"KEY"`
+	// CryptoKey путь до файла с публичным ключом.
+	CryptoKey string `env:"CRYPTO_KEY"`
 	// RateLimit ограничивает количество исходящих запросов.
 	RateLimit int `env:"RATE_LIMIT"`
 }
@@ -46,6 +51,8 @@ type ConfigServer struct {
 	DatabaseDSN string `env:"DATABASE_DSN"`
 	// Key содержит ключ для подписи данных.
 	Key string `env:"KEY"`
+	// CryptoKey определяет путь до файла с приватным ключом.
+	CryptoKey string `env:"CRYPTO_KEY"`
 	// AuditFile определяет путь к файлу логов аудита.
 	AuditFile string `env:"AUDIT_FILE"`
 	// AuditURL содержит URL-адрес внешнего сервиса аудита.
@@ -90,13 +97,14 @@ func (n *NetAddress) Set(s string) error {
 }
 
 // Get парсит конфигурацию сервера.
-func (s *ConfigServer) Get() {
+func (s *ConfigServer) Get() error {
 	f := flag.NewFlagSet("Run server", flag.ContinueOnError)
 	f.Var(&s.Net, "a", "Net address host:port")
 	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
 	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
 	f.StringVar(&s.DatabaseDSN, "d", s.DatabaseDSN, "DatabaseDSN")
 	f.StringVar(&s.Key, "k", s.Key, "Key")
+	f.StringVar(&s.CryptoKey, "crypto-key", s.CryptoKey, "CryptoKey")
 	f.StringVar(&s.AuditFile, "audit-file", s.AuditFile, "AuditFile")
 	f.StringVar(&s.AuditURL, "audit-url", s.AuditURL, "AuditURL")
 	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
@@ -104,8 +112,7 @@ func (s *ConfigServer) Get() {
 	f.IntVar(&s.RetryInterval, "retry-interval", s.RetryInterval, "RetryInterval")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	f.Visit(func(fl *flag.Flag) {
 		switch fl.Name {
@@ -131,8 +138,7 @@ func (s *ConfigServer) Get() {
 	})
 	err = env.Parse(s)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	dsn, envDB := os.LookupEnv("DATABASE_DSN")
 	if envDB && dsn != "" {
@@ -151,38 +157,82 @@ func (s *ConfigServer) Get() {
 	if envURL && url != "" {
 		s.ValidURLAudit = true
 	}
+	return nil
 }
 
 // Get парсит конфигурацию агента.
-func (a *ConfigAgent) Get() {
+func (a *ConfigAgent) Get() error {
 	f := flag.NewFlagSet("Run agent", flag.ContinueOnError)
 	f.Var(&a.Net, "a", "Net address host:port")
 	f.IntVar(&a.ReportInterval, "r", a.ReportInterval, "ReportInterval")
 	f.IntVar(&a.PollInterval, "p", a.PollInterval, "PollInterval")
 	f.IntVar(&a.RateLimit, "l", a.RateLimit, "RateLimit")
 	f.StringVar(&a.Key, "k", a.Key, "Key")
+	f.StringVar(&a.CryptoKey, "crypto-key", a.CryptoKey, "CryptoKey")
 	err := f.Parse(os.Args[1:])
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	err = env.Parse(a)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 	if a.PollInterval == 0 {
-		fmt.Println("pollInterval не может быть нулем")
-		os.Exit(1)
+		return errors.New("pollInterval не может быть нулем")
+
 	}
 	if a.PollInterval > a.ReportInterval {
-		fmt.Println("pollInterval не может быть больше reportInterval")
-		os.Exit(1)
+		return errors.New("pollInterval не может быть больше reportInterval")
 	}
+	return nil
 }
 
+// PrintBuild выводит в консоль информацию о текущей сборке приложения.
 func PrintBuild(version, date, commit string) {
 	fmt.Printf("Build version: %s\n", version)
 	fmt.Printf("Build date: %s\n", date)
 	fmt.Printf("Build commit: %s\n", commit)
+}
+
+// GetKey считывает PEM-файл с диска, декодирует его и парсит приватный RSA-ключ.
+func (s *ConfigServer) GetKey() (*rsa.PrivateKey, error) {
+	data, err := os.ReadFile(s.CryptoKey)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, errors.New("*pem.Block равен nil")
+	}
+	rawKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	privateKey, ok := rawKey.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("некорректный RSA-ключ")
+	}
+	return privateKey, nil
+
+}
+
+// GetKey считывает PEM-файл с диска, декодирует его и парсит публичный RSA-ключ.
+func (a *ConfigAgent) GetKey() (*rsa.PublicKey, error) {
+	data, err := os.ReadFile(a.CryptoKey)
+	if err != nil {
+		return nil, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, errors.New("*pem.Block равен nil")
+	}
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	publicKey, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("некорректный RSA-ключ")
+	}
+	return publicKey, nil
 }

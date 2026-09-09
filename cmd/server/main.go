@@ -44,7 +44,9 @@ func main() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
-	configs.Get()
+	if err := configs.Get(); err != nil {
+		panic(err)
+	}
 	if configs.ValidDB && configs.DatabaseDSN == "" {
 		panic("DatabaseDSN передан, но является пустым")
 	}
@@ -106,6 +108,13 @@ func main() {
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
+	if configs.CryptoKey != "" {
+		privatKey, err := configs.GetKey()
+		if err != nil {
+			panic(err)
+		}
+		r.Use(handler.CryptoMiddleware(privatKey))
+	}
 	r.Use(handler.GzipMiddleware)
 	r.Use(handler.HashMiddleware(configs.Key))
 	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
