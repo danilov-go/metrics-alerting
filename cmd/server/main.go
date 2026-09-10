@@ -73,7 +73,7 @@ func main() {
 	logger.Log.Sugar().Info("Key", configs.Key)
 	client := resty.New().
 		SetTimeout(5 * time.Second).
-		SetRetryCount(configs.RetryDuration).
+		SetRetryCount(int(configs.RetryDuration)).
 		SetRetryWaitTime(time.Duration(configs.RetryInterval) * time.Second).
 		AddRetryCondition(
 			func(r *resty.Response, err error) bool {

@@ -2,73 +2,19 @@
 package config
 
 import (
-	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
+	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/caarlos0/env/v11"
+	"time"
 )
 
 // NetAddress определяет адрес сервера.
 type NetAddress struct {
 	Host string
 	Port int
-}
-
-// ConfigAgent определяет конфигурацию агента.
-type ConfigAgent struct {
-	// Net содержит сетевой адрес для запуска агента.
-	Net NetAddress `env:"ADDRESS"`
-	// PollInterval определяет интервал сбора метрик.
-	PollInterval int `env:"POLL_INTERVAL"`
-	// ReportInterval определяет интервал отправки метрик на сервер.
-	ReportInterval int `env:"REPORT_INTERVAL"`
-	// Key содержит ключ для подписи данных.
-	Key string `env:"KEY"`
-	// CryptoKey путь до файла с публичным ключом.
-	CryptoKey string `env:"CRYPTO_KEY"`
-	// RateLimit ограничивает количество исходящих запросов.
-	RateLimit int `env:"RATE_LIMIT"`
-}
-
-// ConfigServer определяет конфигурацию сервера.
-type ConfigServer struct {
-	// Net содержит сетевой адрес для запуска сервера.
-	Net NetAddress `env:"ADDRESS"`
-	// StoreInterval определяет интервал времени для сохранения метрик на диск.
-	StoreIntrval int `env:"STORE_INTERVAL"`
-	// FileStoragePath определяет путь к файлу, куда сохраняются метрики.
-	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-	// Restore определяет, нужно ли загружать сохранённые метрики из файла при старте сервера.
-	Restore bool `env:"RESTORE"`
-	// DatabaseDSN содержит строку подключения к базе данных PostgreSQL.
-	DatabaseDSN string `env:"DATABASE_DSN"`
-	// Key содержит ключ для подписи данных.
-	Key string `env:"KEY"`
-	// CryptoKey определяет путь до файла с приватным ключом.
-	CryptoKey string `env:"CRYPTO_KEY"`
-	// AuditFile определяет путь к файлу логов аудита.
-	AuditFile string `env:"AUDIT_FILE"`
-	// AuditURL содержит URL-адрес внешнего сервиса аудита.
-	AuditURL string `env:"AUDIT_URL"`
-	// RetryDuration определяет продолжительность попыток повтора операций.
-	RetryDuration int `env:"RETRY_DURATION"`
-	// RetryInterval определяет интервал между повторными попытками выполнения операций.
-	RetryInterval int `env:"RETRY_INTERVAL"`
-	// ValidDB флаг, указывающий на корректность строки подключения к базе данных.
-	ValidDB bool
-	// ValidFile флаг, указывающий на корректность пути к файлу хранилища метрик.
-	ValidFile bool
-	// ValidFileAudit флаг, указывающий на корректность и доступность файла аудита.
-	ValidFileAudit bool
-	// ValidURLAudit флаг, указывающий на корректность и доступность URL аудита.
-	ValidURLAudit bool
 }
 
 // String возвращает строковое представление сетевого адреса в формате host:port.
@@ -96,93 +42,81 @@ func (n *NetAddress) Set(s string) error {
 	return nil
 }
 
-// Get парсит конфигурацию сервера.
-func (s *ConfigServer) Get() error {
-	f := flag.NewFlagSet("Run server", flag.ContinueOnError)
-	f.Var(&s.Net, "a", "Net address host:port")
-	f.IntVar(&s.StoreIntrval, "i", s.StoreIntrval, "StoreIntrval")
-	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
-	f.StringVar(&s.DatabaseDSN, "d", s.DatabaseDSN, "DatabaseDSN")
-	f.StringVar(&s.Key, "k", s.Key, "Key")
-	f.StringVar(&s.CryptoKey, "crypto-key", s.CryptoKey, "CryptoKey")
-	f.StringVar(&s.AuditFile, "audit-file", s.AuditFile, "AuditFile")
-	f.StringVar(&s.AuditURL, "audit-url", s.AuditURL, "AuditURL")
-	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
-	f.IntVar(&s.RetryDuration, "retry-duration", s.RetryDuration, "RetryDuration")
-	f.IntVar(&s.RetryInterval, "retry-interval", s.RetryInterval, "RetryInterval")
-	err := f.Parse(os.Args[1:])
-	if err != nil {
+// UnmarshalJSON десериализует сетевой адрес из JSON формата.
+func (n *NetAddress) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
 		return err
 	}
-	f.Visit(func(fl *flag.Flag) {
-		switch fl.Name {
-		case "d":
-			if s.DatabaseDSN != "" {
-				s.ValidDB = true
-			}
-		case "f":
-			if s.FileStoragePath != "" {
-				s.ValidFile = true
-			}
-		case "r":
-			s.ValidFile = true
-		case "audit-file":
-			if s.AuditFile != "" {
-				s.ValidFileAudit = true
-			}
-		case "audit-url":
-			if s.AuditURL != "" {
-				s.ValidURLAudit = true
-			}
+	return n.Set(str)
+}
+
+// DurationSeconds определяет интервал времени в секундах.
+type DurationSeconds int
+
+// String возвращает строковое представление интервала времени в секундах.
+func (d DurationSeconds) String() string {
+	return strconv.Itoa(int(d))
+}
+
+// Set парсит строку времени или просто число.
+func (d *DurationSeconds) Set(str string) error {
+	if strings.HasSuffix(str, "s") || strings.HasSuffix(str, "m") || strings.HasSuffix(str, "h") {
+		duration, err := time.ParseDuration(str)
+		if err != nil {
+			return err
 		}
-	})
-	err = env.Parse(s)
+		*d = DurationSeconds(duration.Seconds())
+		return nil
+	}
+	num, err := strconv.Atoi(str)
 	if err != nil {
 		return err
 	}
-	dsn, envDB := os.LookupEnv("DATABASE_DSN")
-	if envDB && dsn != "" {
-		s.ValidDB = true
-	}
-	path, envPath := os.LookupEnv("FILE_STORAGE_PATH")
-	_, envRestore := os.LookupEnv("RESTORE")
-	if (envPath && path != "") || envRestore {
-		s.ValidFile = true
-	}
-	pathAudit, envPathAudit := os.LookupEnv("AUDIT_FILE")
-	url, envURL := os.LookupEnv("AUDIT_URL")
-	if envPathAudit && pathAudit != "" {
-		s.ValidFileAudit = true
-	}
-	if envURL && url != "" {
-		s.ValidURLAudit = true
-	}
+	*d = DurationSeconds(num)
 	return nil
 }
 
-// Get парсит конфигурацию агента.
-func (a *ConfigAgent) Get() error {
-	f := flag.NewFlagSet("Run agent", flag.ContinueOnError)
-	f.Var(&a.Net, "a", "Net address host:port")
-	f.IntVar(&a.ReportInterval, "r", a.ReportInterval, "ReportInterval")
-	f.IntVar(&a.PollInterval, "p", a.PollInterval, "PollInterval")
-	f.IntVar(&a.RateLimit, "l", a.RateLimit, "RateLimit")
-	f.StringVar(&a.Key, "k", a.Key, "Key")
-	f.StringVar(&a.CryptoKey, "crypto-key", a.CryptoKey, "CryptoKey")
-	err := f.Parse(os.Args[1:])
-	if err != nil {
+// UnmarshalJSON десериализует интервал времени из JSON формата.
+func (d *DurationSeconds) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		return d.Set(str)
+	}
+	var num int
+	if err := json.Unmarshal(data, &num); err != nil {
 		return err
 	}
-	err = env.Parse(a)
-	if err != nil {
-		return err
-	}
-	if a.PollInterval == 0 {
-		return errors.New("pollInterval не может быть нулем")
+	*d = DurationSeconds(num)
+	return nil
+}
 
+// UnmarshalText десериализует интервал времени из текстового формата для библиотеки env.
+func (d *DurationSeconds) UnmarshalText(data []byte) error {
+	return d.Set(string(data))
+}
+
+// GetPath определяет путь к файлу конфигурации.
+func GetPath() string {
+	if path := os.Getenv("CONFIG"); path != "" {
+		return path
 	}
-	if a.PollInterval > a.ReportInterval {
-		return errors.New("pollInterval не может быть больше reportInterval")
+	for i := 1; i < len(os.Args)-1; i++ {
+		if os.Args[i] == "-c" || os.Args[i] == "-config" {
+			return os.Args[i+1]
+		}
+	}
+	return ""
+}
+
+// LoadJSON десериализует конфигурацию из JSON файла.
+func LoadJSON[T any](path string, t *T) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(data, t); err != nil {
+		return err
 	}
 	return nil
 }
@@ -192,47 +126,4 @@ func PrintBuild(version, date, commit string) {
 	fmt.Printf("Build version: %s\n", version)
 	fmt.Printf("Build date: %s\n", date)
 	fmt.Printf("Build commit: %s\n", commit)
-}
-
-// GetKey считывает PEM-файл с диска, декодирует его и парсит приватный RSA-ключ.
-func (s *ConfigServer) GetKey() (*rsa.PrivateKey, error) {
-	data, err := os.ReadFile(s.CryptoKey)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode(data)
-	if block == nil {
-		return nil, errors.New("*pem.Block равен nil")
-	}
-	rawKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	privateKey, ok := rawKey.(*rsa.PrivateKey)
-	if !ok {
-		return nil, errors.New("некорректный RSA-ключ")
-	}
-	return privateKey, nil
-
-}
-
-// GetKey считывает PEM-файл с диска, декодирует его и парсит публичный RSA-ключ.
-func (a *ConfigAgent) GetKey() (*rsa.PublicKey, error) {
-	data, err := os.ReadFile(a.CryptoKey)
-	if err != nil {
-		return nil, err
-	}
-	block, _ := pem.Decode(data)
-	if block == nil {
-		return nil, errors.New("*pem.Block равен nil")
-	}
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	publicKey, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		return nil, errors.New("некорректный RSA-ключ")
-	}
-	return publicKey, nil
 }

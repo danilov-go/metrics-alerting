@@ -40,8 +40,8 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 		Client:         client,
 		logger:         l,
 		key:            cfg.Key,
-		pollInterval:   cfg.PollInterval,
-		reportInterval: cfg.ReportInterval,
+		pollInterval:   int(cfg.PollInterval),
+		reportInterval: int(cfg.ReportInterval),
 		rateLimit:      cfg.RateLimit,
 	}
 }
