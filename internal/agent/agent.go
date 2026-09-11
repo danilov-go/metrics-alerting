@@ -84,6 +84,9 @@ func (a *Agent) merge(ctx context.Context, wg *sync.WaitGroup, gopsutilChan, run
 		for {
 			select {
 			case <-ctx.Done():
+				if len(metrics) > 0 {
+					metricsChan <- metrics
+				}
 				return
 			case metric, ok := <-gopsutilChan:
 				if !ok {

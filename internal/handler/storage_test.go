@@ -57,6 +57,10 @@ func (m *testStorage) Ping(ctx context.Context) error {
 	m.count++
 	return m.returnErr
 }
+func (m *testStorage) Close() error {
+	m.count++
+	return m.returnErr
+}
 
 func TestNewErrorMiddleware(t *testing.T) {
 	retriableErr := &pgconn.PgError{
@@ -113,7 +117,9 @@ func TestNewErrorMiddleware(t *testing.T) {
 			check(err, tt.wantCount, tt.wantErr)
 			err = middleware.Ping(ctx)
 			check(err, tt.wantCount, tt.wantErr)
-
+			err = middleware.Close()
+			assert.Error(t, err)
+			assert.Equal(t, h.count, 1)
 		})
 	}
 }

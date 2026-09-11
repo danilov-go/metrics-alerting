@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/agent"
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
@@ -43,6 +46,12 @@ func main() {
 	logger.Log.Sugar().Info("Key", configs.Key)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	go func() {
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+		<-signalChan
+		cancel()
+	}()
 	client := agent.New(*configs, logger.Log.Sugar())
 	client.Run(ctx, publicKey)
 }

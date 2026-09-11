@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/audit"
@@ -15,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -138,7 +143,24 @@ func main() {
 		}
 	}()
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
-	if err := serv.Run(); err != nil {
+	g, gCtx := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		return serv.Run()
+	})
+	g.Go(func() error {
+		signalChan := make(chan os.Signal, 1)
+		signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+		select {
+		case <-signalChan:
+			return serv.Stop()
+		case <-gCtx.Done():
+			return nil
+		}
+	})
+	if err := g.Wait(); err != nil {
+		panic(err)
+	}
+	if err := storage.Close(); err != nil {
 		panic(err)
 	}
 }
