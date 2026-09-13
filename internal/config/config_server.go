@@ -8,6 +8,7 @@ import (
 	"flag"
 	"os"
 
+	"dario.cat/mergo"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -35,20 +36,15 @@ type ConfigServer struct {
 	RetryDuration DurationSeconds `env:"RETRY_DURATION"`
 	// RetryInterval определяет интервал между повторными попытками выполнения операций.
 	RetryInterval DurationSeconds `env:"RETRY_INTERVAL"`
-	// ValidDB флаг, указывающий на корректность строки подключения к базе данных.
-	ValidDB bool
-	// ValidFile флаг, указывающий на корректность пути к файлу хранилища метрик.
-	ValidFile bool
-	// ValidFileAudit флаг, указывающий на корректность и доступность файла аудита.
-	ValidFileAudit bool
-	// ValidURLAudit флаг, указывающий на корректность и доступность URL аудита.
-	ValidURLAudit bool
 }
 
 // Get парсит конфигурацию сервера.
 func (s *ConfigServer) Get() error {
+	var cfgJSON ConfigServer
+	var cfgEnv ConfigServer
+	var cfgFlags ConfigServer
 	if path := GetPath(); path != "" {
-		if err := LoadJSON(path, s); err != nil {
+		if err := LoadJSON(path, &cfgJSON); err != nil {
 			return err
 		}
 	}
@@ -56,61 +52,40 @@ func (s *ConfigServer) Get() error {
 	var dummy string
 	f.StringVar(&dummy, "c", "", "Path to config file")
 	f.StringVar(&dummy, "config", "", "Path to config file")
-	f.Var(&s.Net, "a", "Net address host:port")
-	f.Var(&s.StoreIntrval, "i", "StoreIntrval")
-	f.StringVar(&s.FileStoragePath, "f", s.FileStoragePath, "FileStoragePath")
-	f.StringVar(&s.DatabaseDSN, "d", s.DatabaseDSN, "DatabaseDSN")
-	f.StringVar(&s.Key, "k", s.Key, "Key")
-	f.StringVar(&s.CryptoKey, "crypto-key", s.CryptoKey, "CryptoKey")
-	f.StringVar(&s.AuditFile, "audit-file", s.AuditFile, "AuditFile")
-	f.StringVar(&s.AuditURL, "audit-url", s.AuditURL, "AuditURL")
-	f.BoolVar(&s.Restore, "r", s.Restore, "Restore")
-	f.Var(&s.RetryDuration, "retry-duration", "RetryDuration")
-	f.Var(&s.RetryInterval, "retry-interval", "RetryInterval")
+	f.Var(&cfgFlags.Net, "a", "Net address host:port")
+	f.Var(&cfgFlags.StoreIntrval, "i", "StoreIntrval")
+	f.StringVar(&cfgFlags.FileStoragePath, "f", "", "FileStoragePath")
+	f.StringVar(&cfgFlags.DatabaseDSN, "d", "", "DatabaseDSN")
+	f.StringVar(&cfgFlags.Key, "k", "", "Key")
+	f.StringVar(&cfgFlags.CryptoKey, "crypto-key", "", "CryptoKey")
+	f.StringVar(&cfgFlags.AuditFile, "audit-file", "", "AuditFile")
+	f.StringVar(&cfgFlags.AuditURL, "audit-url", "", "AuditURL")
+	f.BoolVar(&cfgFlags.Restore, "r", false, "Restore")
+	f.Var(&cfgFlags.RetryDuration, "retry-duration", "RetryDuration")
+	f.Var(&cfgFlags.RetryInterval, "retry-interval", "RetryInterval")
 	if err := f.Parse(os.Args[1:]); err != nil {
 		return err
 	}
-	f.Visit(func(fl *flag.Flag) {
-		switch fl.Name {
-		case "d":
-			if s.DatabaseDSN != "" {
-				s.ValidDB = true
-			}
-		case "f":
-			if s.FileStoragePath != "" {
-				s.ValidFile = true
-			}
-		case "r":
-			s.ValidFile = true
-		case "audit-file":
-			if s.AuditFile != "" {
-				s.ValidFileAudit = true
-			}
-		case "audit-url":
-			if s.AuditURL != "" {
-				s.ValidURLAudit = true
-			}
-		}
-	})
-	if err := env.Parse(s); err != nil {
+	if err := env.Parse(&cfgEnv); err != nil {
 		return err
 	}
-	dsn, envDB := os.LookupEnv("DATABASE_DSN")
-	if envDB && dsn != "" {
-		s.ValidDB = true
+	if err := mergo.Merge(s, cfgJSON, mergo.WithOverride); err != nil {
+		return err
 	}
-	path, envPath := os.LookupEnv("FILE_STORAGE_PATH")
-	_, envRestore := os.LookupEnv("RESTORE")
-	if (envPath && path != "") || envRestore {
-		s.ValidFile = true
+	if err := mergo.Merge(s, cfgFlags, mergo.WithOverride); err != nil {
+		return err
 	}
-	pathAudit, envPathAudit := os.LookupEnv("AUDIT_FILE")
-	url, envURL := os.LookupEnv("AUDIT_URL")
-	if envPathAudit && pathAudit != "" {
-		s.ValidFileAudit = true
+	if err := mergo.Merge(s, cfgEnv, mergo.WithOverride); err != nil {
+		return err
 	}
-	if envURL && url != "" {
-		s.ValidURLAudit = true
+	if _, ok := os.LookupEnv("RESTORE"); ok {
+		s.Restore = cfgEnv.Restore
+	} else {
+		f.Visit(func(fl *flag.Flag) {
+			if fl.Name == "r" {
+				s.Restore = cfgFlags.Restore
+			}
+		})
 	}
 	return nil
 }

@@ -18,10 +18,6 @@ func TestConfigServer_Get(t *testing.T) {
 		auditFile       string
 		auditURL        string
 		restore         bool
-		validDB         bool
-		validFile       bool
-		validFileAudit  bool
-		validURLAudit   bool
 	}
 	tests := []struct {
 		name          string
@@ -51,10 +47,6 @@ func TestConfigServer_Get(t *testing.T) {
 				auditFile:       "test_flag.log",
 				auditURL:        "test_flag",
 				restore:         false,
-				validDB:         true,
-				validFile:       true,
-				validFileAudit:  true,
-				validURLAudit:   true,
 			},
 		},
 		{
@@ -85,10 +77,6 @@ func TestConfigServer_Get(t *testing.T) {
 				auditFile:       "test_env.log",
 				auditURL:        "test_env",
 				restore:         false,
-				validDB:         true,
-				validFile:       true,
-				validFileAudit:  true,
-				validURLAudit:   true,
 			},
 		},
 	}
@@ -123,10 +111,6 @@ func TestConfigServer_Get(t *testing.T) {
 			assert.Equal(t, tt.exp.auditFile, cfg.AuditFile)
 			assert.Equal(t, tt.exp.auditURL, cfg.AuditURL)
 			assert.Equal(t, tt.exp.restore, cfg.Restore)
-			assert.Equal(t, tt.exp.validDB, cfg.ValidDB)
-			assert.Equal(t, tt.exp.validFile, cfg.ValidFile)
-			assert.Equal(t, tt.exp.validFileAudit, cfg.ValidFileAudit)
-			assert.Equal(t, tt.exp.validURLAudit, cfg.ValidURLAudit)
 		})
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rsa"
-	"os"
 	"os/signal"
 	"syscall"
 
@@ -30,28 +29,21 @@ func main() {
 		Key:            "",
 		RateLimit:      3,
 	}
-	if err := configs.Get(); err != nil {
-		panic(err)
-	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
+	}
+	if err := configs.Get(); err != nil {
+		logger.Log.Sugar().Fatal("ошибка загрузки конфигурации агента")
 	}
 	var publicKey *rsa.PublicKey
 	var errC error
 	if configs.CryptoKey != "" {
 		if publicKey, errC = configs.GetKey(); errC != nil {
-			panic(errC)
+			logger.Log.Sugar().Fatal("ошибка загрузки или парсинга публичного ключа агента")
 		}
 	}
-	logger.Log.Sugar().Info("Key", configs.Key)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		signalChan := make(chan os.Signal, 1)
-		signal.Notify(signalChan, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
-		<-signalChan
-		cancel()
-	}()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	defer stop()
 	client := agent.New(*configs, logger.Log.Sugar())
 	client.Run(ctx, publicKey)
 }

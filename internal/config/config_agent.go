@@ -8,6 +8,8 @@ import (
 	"flag"
 	"os"
 
+	"dario.cat/mergo"
+
 	"github.com/caarlos0/env/v11"
 )
 
@@ -29,8 +31,11 @@ type ConfigAgent struct {
 
 // Get парсит конфигурацию агента.
 func (a *ConfigAgent) Get() error {
+	var cfgJSON ConfigAgent
+	var cfgEnv ConfigAgent
+	var cfgFlags ConfigAgent
 	if path := GetPath(); path != "" {
-		if err := LoadJSON(path, a); err != nil {
+		if err := LoadJSON(path, &cfgJSON); err != nil {
 			return err
 		}
 	}
@@ -38,16 +43,25 @@ func (a *ConfigAgent) Get() error {
 	var dummy string
 	f.StringVar(&dummy, "c", "", "Path to config file")
 	f.StringVar(&dummy, "config", "", "Path to config file")
-	f.Var(&a.Net, "a", "Net address host:port")
-	f.Var(&a.ReportInterval, "r", "ReportInterval")
-	f.Var(&a.PollInterval, "p", "PollInterval")
-	f.IntVar(&a.RateLimit, "l", a.RateLimit, "RateLimit")
-	f.StringVar(&a.Key, "k", a.Key, "Key")
-	f.StringVar(&a.CryptoKey, "crypto-key", a.CryptoKey, "CryptoKey")
+	f.Var(&cfgFlags.Net, "a", "Net address host:port")
+	f.Var(&cfgFlags.ReportInterval, "r", "ReportInterval")
+	f.Var(&cfgFlags.PollInterval, "p", "PollInterval")
+	f.IntVar(&cfgFlags.RateLimit, "l", 0, "RateLimit")
+	f.StringVar(&cfgFlags.Key, "k", "", "Key")
+	f.StringVar(&cfgFlags.CryptoKey, "crypto-key", "", "CryptoKey")
 	if err := f.Parse(os.Args[1:]); err != nil {
 		return err
 	}
-	if err := env.Parse(a); err != nil {
+	if err := env.Parse(&cfgEnv); err != nil {
+		return err
+	}
+	if err := mergo.Merge(a, cfgJSON, mergo.WithOverride); err != nil {
+		return err
+	}
+	if err := mergo.Merge(a, cfgFlags, mergo.WithOverride); err != nil {
+		return err
+	}
+	if err := mergo.Merge(a, cfgEnv, mergo.WithOverride); err != nil {
 		return err
 	}
 	if a.PollInterval == 0 {

@@ -5,7 +5,6 @@ package agent
 import (
 	"context"
 	"crypto/rsa"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,7 +34,6 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
 	client.SetBaseURL("http://" + cfg.Net.String())
-	fmt.Println(cfg.Net.String())
 	return &Agent{
 		Client:         client,
 		logger:         l,
