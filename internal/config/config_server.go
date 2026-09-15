@@ -32,6 +32,8 @@ type ConfigServer struct {
 	AuditFile string `env:"AUDIT_FILE"`
 	// AuditURL содержит URL-адрес внешнего сервиса аудита.
 	AuditURL string `env:"AUDIT_URL"`
+	//TrustedSubnet определяет строковое представление бесклассовой адресации (CIDR).
+	TrustedSubnet string `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
 	// RetryDuration определяет продолжительность попыток повтора операций.
 	RetryDuration DurationSeconds `env:"RETRY_DURATION"`
 	// RetryInterval определяет интервал между повторными попытками выполнения операций.
@@ -60,6 +62,7 @@ func (s *ConfigServer) Get() error {
 	f.StringVar(&cfgFlags.CryptoKey, "crypto-key", "", "CryptoKey")
 	f.StringVar(&cfgFlags.AuditFile, "audit-file", "", "AuditFile")
 	f.StringVar(&cfgFlags.AuditURL, "audit-url", "", "AuditURL")
+	f.StringVar(&cfgFlags.TrustedSubnet, "t", "", "TrustedSubnet")
 	f.BoolVar(&cfgFlags.Restore, "r", false, "Restore")
 	f.Var(&cfgFlags.RetryDuration, "retry-duration", "RetryDuration")
 	f.Var(&cfgFlags.RetryInterval, "retry-interval", "RetryInterval")

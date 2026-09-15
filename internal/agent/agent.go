@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"crypto/rsa"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +28,7 @@ type Agent struct {
 	reportInterval int
 	rateLimit      int
 	pollCount      atomic.Int64
+	host           string
 }
 
 // New создает новый экземпляр Agent.
@@ -34,6 +36,10 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
 	client.SetBaseURL("http://" + cfg.Net.String())
+	host, err := getHost(cfg.Net.String())
+	if err != nil {
+		l.Errorw("ошибка получения host агента", "error", err)
+	}
 	return &Agent{
 		Client:         client,
 		logger:         l,
@@ -41,7 +47,22 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 		pollInterval:   int(cfg.PollInterval),
 		reportInterval: int(cfg.ReportInterval),
 		rateLimit:      cfg.RateLimit,
+		host:           host,
 	}
+}
+
+func getHost(adr string) (string, error) {
+	conn, err := net.Dial("udp", adr)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	localAddr := conn.LocalAddr()
+	host, _, err := net.SplitHostPort(localAddr.String())
+	if err != nil {
+		return "", err
+	}
+	return host, nil
 }
 
 // Run запускает процесс сбора и отправки метрик на сервер.

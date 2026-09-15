@@ -74,12 +74,7 @@ func TestConfigAgent_Get(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("ADDRESS", "")
-			t.Setenv("POLL_INTERVAL", "")
-			t.Setenv("REPORT_INTERVAL", "")
-			t.Setenv("KEY", "")
-			t.Setenv("CRYPTO_KEY", "")
-			t.Setenv("RATE_LIMIT", "")
+			resetEnv(t)
 			for k, v := range tt.envSetup {
 				t.Setenv(k, v)
 			}
@@ -96,6 +91,7 @@ func TestConfigAgent_Get(t *testing.T) {
 			assert.Equal(t, tt.want.key, cfg.Key)
 			assert.Equal(t, tt.want.cryptoKey, cfg.CryptoKey)
 			assert.Equal(t, tt.want.rateLimit, cfg.RateLimit)
+			resetEnv(t)
 		})
 	}
 }

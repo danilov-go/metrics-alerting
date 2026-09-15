@@ -17,6 +17,7 @@ func TestConfigServer_Get(t *testing.T) {
 		key             string
 		auditFile       string
 		auditURL        string
+		trustedSubnet   string
 		restore         bool
 	}
 	tests := []struct {
@@ -37,6 +38,8 @@ func TestConfigServer_Get(t *testing.T) {
 				"-k", "test_flag_key",
 				"-audit-file", "test_flag.log",
 				"-audit-url", "test_flag",
+				"-t", "192.168.1.0/24",
+				"-r", "true",
 			},
 			wantErr: false,
 			exp: want{
@@ -46,7 +49,8 @@ func TestConfigServer_Get(t *testing.T) {
 				key:             "test_flag_key",
 				auditFile:       "test_flag.log",
 				auditURL:        "test_flag",
-				restore:         false,
+				trustedSubnet:   "192.168.1.0/24",
+				restore:         true,
 			},
 		},
 		{
@@ -59,6 +63,8 @@ func TestConfigServer_Get(t *testing.T) {
 				"-k", "test_flag_key",
 				"-audit-file", "test_flag.log",
 				"-audit-url", "test_flag",
+				"-t", "192.168.1.0/24",
+				"-r", "true",
 			},
 			envSetup: map[string]string{
 				"STORE_INTERVAL":    "20",
@@ -67,6 +73,8 @@ func TestConfigServer_Get(t *testing.T) {
 				"KEY":               "test_env_key",
 				"AUDIT_FILE":        "test_env.log",
 				"AUDIT_URL":         "test_env",
+				"TRUSTED_SUBNET":    "192.168.1.0/25",
+				"RESTORE":           "false",
 			},
 			wantErr: false,
 			exp: want{
@@ -76,23 +84,14 @@ func TestConfigServer_Get(t *testing.T) {
 				key:             "test_env_key",
 				auditFile:       "test_env.log",
 				auditURL:        "test_env",
+				trustedSubnet:   "192.168.1.0/25",
 				restore:         false,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("ADDRESS", "")
-			t.Setenv("STORE_INTERVAL", "")
-			t.Setenv("FILE_STORAGE_PATH", "")
-			t.Setenv("RESTORE", "")
-			t.Setenv("DATABASE_DSN", "")
-			t.Setenv("KEY", "")
-			t.Setenv("CRYPTO_KEY", "")
-			t.Setenv("AUDIT_FILE", "")
-			t.Setenv("AUDIT_URL", "")
-			t.Setenv("RETRY_DURATION", "")
-			t.Setenv("RETRY_INTERVAL", "")
+			resetEnv(t)
 			for k, v := range tt.envSetup {
 				t.Setenv(k, v)
 			}
@@ -110,7 +109,35 @@ func TestConfigServer_Get(t *testing.T) {
 			assert.Equal(t, tt.exp.key, cfg.Key)
 			assert.Equal(t, tt.exp.auditFile, cfg.AuditFile)
 			assert.Equal(t, tt.exp.auditURL, cfg.AuditURL)
+			assert.Equal(t, tt.exp.trustedSubnet, cfg.TrustedSubnet)
 			assert.Equal(t, tt.exp.restore, cfg.Restore)
+			resetEnv(t)
 		})
+	}
+}
+
+func resetEnv(t *testing.T) {
+	envs := []string{
+		"ADDRESS",
+		"KEY",
+		"CRYPTO_KEY",
+		"CONFIG",
+		"STORE_INTERVAL",
+		"FILE_STORAGE_PATH",
+		"RESTORE",
+		"DATABASE_DSN",
+		"AUDIT_FILE",
+		"AUDIT_URL",
+		"RETRY_DURATION",
+		"RETRY_INTERVAL",
+		"TRUSTED_SUBNET",
+		"POLL_INTERVAL",
+		"REPORT_INTERVAL",
+		"RATE_LIMIT",
+	}
+	for _, env := range envs {
+		if err := os.Unsetenv(env); err != nil {
+			assert.NoError(t, err)
+		}
 	}
 }
