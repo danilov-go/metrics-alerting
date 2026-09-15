@@ -369,16 +369,16 @@ func Test_storageDB_SaveAll(t *testing.T) {
 		{
 			name: "положительный тест",
 			metrics: []models.Metrics{
-				{ID: "Alloc", MType: models.Gauge, Value: models.PointerFloat64(123.45)},
-				{ID: "CPUutilization1", MType: models.Gauge, Value: models.PointerFloat64(38.88)},
-				{ID: "CPUutilization2", MType: models.Gauge, Value: models.PointerFloat64(35.17)},
-				{ID: "CPUutilization3", MType: models.Gauge, Value: models.PointerFloat64(22.22)},
-				{ID: "CPUutilization4", MType: models.Gauge, Value: models.PointerFloat64(18.50)},
-				{ID: "CPUutilization5", MType: models.Gauge, Value: models.PointerFloat64(0.99)},
-				{ID: "CPUutilization6", MType: models.Gauge, Value: models.PointerFloat64(0.50)},
-				{ID: "CPUutilization7", MType: models.Gauge, Value: models.PointerFloat64(0.49)},
-				{ID: "CPUutilization8", MType: models.Gauge, Value: models.PointerFloat64(0.99)},
-				{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(5)},
+				{ID: "Alloc", MType: models.Gauge, Value: models.Pointer(123.45)},
+				{ID: "CPUutilization1", MType: models.Gauge, Value: models.Pointer(38.88)},
+				{ID: "CPUutilization2", MType: models.Gauge, Value: models.Pointer(35.17)},
+				{ID: "CPUutilization3", MType: models.Gauge, Value: models.Pointer(22.22)},
+				{ID: "CPUutilization4", MType: models.Gauge, Value: models.Pointer(18.50)},
+				{ID: "CPUutilization5", MType: models.Gauge, Value: models.Pointer(0.99)},
+				{ID: "CPUutilization6", MType: models.Gauge, Value: models.Pointer(0.50)},
+				{ID: "CPUutilization7", MType: models.Gauge, Value: models.Pointer(0.49)},
+				{ID: "CPUutilization8", MType: models.Gauge, Value: models.Pointer(0.99)},
+				{ID: "PollCount", MType: models.Counter, Delta: models.Pointer(int64(5))},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()

@@ -257,3 +257,11 @@ func (d *storageDB) Ping(ctx context.Context) error {
 	}
 	return nil
 }
+
+// Close закрывает соединение с базой данных PostgreSQL.
+func (d *storageDB) Close() error {
+	if d.db != nil {
+		return d.db.Close()
+	}
+	return nil
+}

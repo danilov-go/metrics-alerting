@@ -40,6 +40,7 @@ type Storage interface {
 	GetAllCounters(ctx context.Context) (map[string]int64, error)
 	SaveAll(ctx context.Context, metrics []models.Metrics) error
 	Ping(ctx context.Context) error
+	Close() error
 }
 
 // PGErrorClassification определяет категорию ошибки базы данных для повторных попыток выполнения.
@@ -212,4 +213,9 @@ func (rm *ErrorStorageMiddleware) Ping(ctx context.Context) error {
 		return rm.next.Ping(ctx)
 	}
 	return rm.replay(ctx, operation)
+}
+
+// Close инициализирует закрытие или сохранение данных в хранилище.
+func (rm *ErrorStorageMiddleware) Close() error {
+	return rm.next.Close()
 }

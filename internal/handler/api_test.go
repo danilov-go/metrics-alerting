@@ -41,7 +41,7 @@ func TestAPIUpdateHandler(t *testing.T) {
 			m: models.Metrics{
 				ID:    "Alloc",
 				MType: models.Gauge,
-				Value: models.PointerFloat64(123.45),
+				Value: models.Pointer(123.45),
 			},
 			expected: want{
 				mExp: metricExpected{
@@ -58,7 +58,7 @@ func TestAPIUpdateHandler(t *testing.T) {
 			m: models.Metrics{
 				ID:    "PollCount",
 				MType: models.Counter,
-				Delta: models.PointerInt64(15),
+				Delta: models.Pointer(int64(15)),
 			},
 			expected: want{
 				mExp: metricExpected{
@@ -75,7 +75,7 @@ func TestAPIUpdateHandler(t *testing.T) {
 			m: models.Metrics{
 				ID:    "",
 				MType: models.Gauge,
-				Value: models.PointerFloat64(123.45),
+				Value: models.Pointer(123.45),
 			},
 			expected: want{
 				code: http.StatusNotFound,
@@ -87,7 +87,7 @@ func TestAPIUpdateHandler(t *testing.T) {
 			m: models.Metrics{
 				ID:    "Alloc",
 				MType: "invalid_type",
-				Value: models.PointerFloat64(123.45),
+				Value: models.Pointer(123.45),
 			},
 			expected: want{
 				code: http.StatusBadRequest,
@@ -357,7 +357,7 @@ func TestAPIUpdatesHandler(t *testing.T) {
 			m: models.Metrics{
 				ID:    "Alloc",
 				MType: models.Gauge,
-				Value: models.PointerFloat64(123.45),
+				Value: models.Pointer(123.45),
 			},
 			contentType: "application/json",
 			expected: want{
@@ -374,7 +374,7 @@ func TestAPIUpdatesHandler(t *testing.T) {
 			m: models.Metrics{
 				ID:    "PollCount",
 				MType: models.Counter,
-				Delta: models.PointerInt64(15),
+				Delta: models.Pointer(int64(15)),
 			},
 			contentType: "application/json",
 			expected: want{
@@ -391,7 +391,7 @@ func TestAPIUpdatesHandler(t *testing.T) {
 			m: models.Metrics{
 				ID:    "Alloc",
 				MType: "invalid_type",
-				Value: models.PointerFloat64(123.45),
+				Value: models.Pointer(123.45),
 			},
 			contentType: "application/json",
 			expected: want{

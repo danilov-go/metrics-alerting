@@ -19,12 +19,9 @@ type Metrics struct {
 	Value *float64 `json:"value,omitempty"`
 }
 
-// PointerFloat64 возвращает указатель на переданное значение float64.
-func PointerFloat64(value float64) *float64 {
-	return &value
-}
-
-// PointerInt64 возвращает указатель на переданное значение int64.
-func PointerInt64(value int64) *int64 {
-	return &value
+// Pointer возвращает указатель на переданное значение любого типа.
+func Pointer[T any](value T) *T {
+	p := new(T)
+	*p = value
+	return p
 }

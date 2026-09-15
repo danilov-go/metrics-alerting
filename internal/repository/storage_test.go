@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
@@ -222,16 +224,16 @@ func TestMemStorage_SaveAll(t *testing.T) {
 		{
 			name: "положительный тест",
 			metricsExp: []models.Metrics{
-				{ID: "Alloc", MType: models.Gauge, Value: models.PointerFloat64(123.45)},
-				{ID: "CPUutilization1", MType: models.Gauge, Value: models.PointerFloat64(38.88)},
-				{ID: "CPUutilization2", MType: models.Gauge, Value: models.PointerFloat64(35.17)},
-				{ID: "CPUutilization3", MType: models.Gauge, Value: models.PointerFloat64(22.22)},
-				{ID: "CPUutilization4", MType: models.Gauge, Value: models.PointerFloat64(18.50)},
-				{ID: "CPUutilization5", MType: models.Gauge, Value: models.PointerFloat64(0.99)},
-				{ID: "CPUutilization6", MType: models.Gauge, Value: models.PointerFloat64(0.50)},
-				{ID: "CPUutilization7", MType: models.Gauge, Value: models.PointerFloat64(0.49)},
-				{ID: "CPUutilization8", MType: models.Gauge, Value: models.PointerFloat64(0.99)},
-				{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(5)},
+				{ID: "Alloc", MType: models.Gauge, Value: models.Pointer(123.45)},
+				{ID: "CPUutilization1", MType: models.Gauge, Value: models.Pointer(38.88)},
+				{ID: "CPUutilization2", MType: models.Gauge, Value: models.Pointer(35.17)},
+				{ID: "CPUutilization3", MType: models.Gauge, Value: models.Pointer(22.22)},
+				{ID: "CPUutilization4", MType: models.Gauge, Value: models.Pointer(18.50)},
+				{ID: "CPUutilization5", MType: models.Gauge, Value: models.Pointer(0.99)},
+				{ID: "CPUutilization6", MType: models.Gauge, Value: models.Pointer(0.50)},
+				{ID: "CPUutilization7", MType: models.Gauge, Value: models.Pointer(0.49)},
+				{ID: "CPUutilization8", MType: models.Gauge, Value: models.Pointer(0.99)},
+				{ID: "PollCount", MType: models.Counter, Delta: models.Pointer(int64(5))},
 			},
 			wantErr: false,
 			wantGauges: map[string]float64{
@@ -280,8 +282,8 @@ func TestMemStorage_SaveAll(t *testing.T) {
 		{
 			name: "nil мапа",
 			metricsExp: []models.Metrics{
-				{ID: "Alloc", MType: models.Gauge, Value: models.PointerFloat64(123.45)},
-				{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(5)},
+				{ID: "Alloc", MType: models.Gauge, Value: models.Pointer(123.45)},
+				{ID: "PollCount", MType: models.Counter, Delta: models.Pointer(int64(5))},
 			},
 			wantErr: false,
 			wantGauges: map[string]float64{
@@ -328,15 +330,15 @@ func TestMemStorage_GetAllGauges(t *testing.T) {
 		{
 			name: "положительный тест",
 			metricsExp: []models.Metrics{
-				{ID: "Alloc", MType: models.Gauge, Value: models.PointerFloat64(123.45)},
-				{ID: "CPUutilization1", MType: models.Gauge, Value: models.PointerFloat64(38.88)},
-				{ID: "CPUutilization2", MType: models.Gauge, Value: models.PointerFloat64(35.17)},
-				{ID: "CPUutilization3", MType: models.Gauge, Value: models.PointerFloat64(22.22)},
-				{ID: "CPUutilization4", MType: models.Gauge, Value: models.PointerFloat64(18.50)},
-				{ID: "CPUutilization5", MType: models.Gauge, Value: models.PointerFloat64(0.99)},
-				{ID: "CPUutilization6", MType: models.Gauge, Value: models.PointerFloat64(0.50)},
-				{ID: "CPUutilization7", MType: models.Gauge, Value: models.PointerFloat64(0.49)},
-				{ID: "CPUutilization8", MType: models.Gauge, Value: models.PointerFloat64(0.99)},
+				{ID: "Alloc", MType: models.Gauge, Value: models.Pointer(123.45)},
+				{ID: "CPUutilization1", MType: models.Gauge, Value: models.Pointer(38.88)},
+				{ID: "CPUutilization2", MType: models.Gauge, Value: models.Pointer(35.17)},
+				{ID: "CPUutilization3", MType: models.Gauge, Value: models.Pointer(22.22)},
+				{ID: "CPUutilization4", MType: models.Gauge, Value: models.Pointer(18.50)},
+				{ID: "CPUutilization5", MType: models.Gauge, Value: models.Pointer(0.99)},
+				{ID: "CPUutilization6", MType: models.Gauge, Value: models.Pointer(0.50)},
+				{ID: "CPUutilization7", MType: models.Gauge, Value: models.Pointer(0.49)},
+				{ID: "CPUutilization8", MType: models.Gauge, Value: models.Pointer(0.99)},
 			},
 			wantGauges: map[string]float64{
 				"Alloc":           123.45,
@@ -382,8 +384,8 @@ func TestMemStorage_GetAllCounters(t *testing.T) {
 		{
 			name: "положительный тест",
 			metricsExp: []models.Metrics{
-				{ID: "PollCount", MType: models.Counter, Delta: models.PointerInt64(5)},
-				{ID: "PollCountTest", MType: models.Counter, Delta: models.PointerInt64(10)},
+				{ID: "PollCount", MType: models.Counter, Delta: models.Pointer(int64(5))},
+				{ID: "PollCountTest", MType: models.Counter, Delta: models.Pointer(int64(10))},
 			},
 			wantCounters: map[string]int64{
 				"PollCount":     5,
@@ -443,4 +445,48 @@ func TestMemStorage_Ping(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMemStorage_SaveFile(t *testing.T) {
+	testDir := t.TempDir()
+	testPath := filepath.Join(testDir, "test.txt")
+	logger := zaptest.NewLogger(t)
+	cfg := repository.ConfigFile{
+		Path:     testPath,
+		Interval: 0,
+		Restore:  false,
+	}
+	storage := repository.InitMemStorage(cfg, logger.Sugar())
+	storage.Gauges["Alloc"] = 123.45
+	storage.Counters["PollCount"] = 5
+	err := storage.SaveFile()
+	assert.NoError(t, err)
+	assert.FileExists(t, testPath)
+	data, err := os.ReadFile(testPath)
+	assert.NoError(t, err)
+	assert.Contains(t, string(data), "Alloc")
+	assert.Contains(t, string(data), "123.45")
+	assert.Contains(t, string(data), "PollCount")
+	assert.Contains(t, string(data), "5")
+}
+
+func TestMemStorage_LoadFile(t *testing.T) {
+	testDir := t.TempDir()
+	testPath := filepath.Join(testDir, "test.txt")
+	logger := zaptest.NewLogger(t)
+	expData := `{"gauges":{"Alloc":123.45},"counters":{"PollCount":5}}`
+	err := os.WriteFile(testPath, []byte(expData), 0644)
+	assert.NoError(t, err)
+	cfg := repository.ConfigFile{
+		Path:     testPath,
+		Interval: 0,
+		Restore:  true,
+	}
+	storage := repository.InitMemStorage(cfg, logger.Sugar())
+	val, ok := storage.Gauges["Alloc"]
+	assert.True(t, ok)
+	assert.Equal(t, 123.45, val)
+	delta, ok := storage.Counters["PollCount"]
+	assert.True(t, ok)
+	assert.Equal(t, int64(5), delta)
 }

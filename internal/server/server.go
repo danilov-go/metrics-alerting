@@ -2,7 +2,10 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"time"
 )
 
 type log interface {
@@ -29,6 +32,24 @@ func New(port string, l log, r http.Handler) *Server {
 
 // Run запускает HTTP-сервер.
 func (serv *Server) Run() error {
-	serv.Logger.Infow("Running server", "address", serv.Server.Addr)
-	return serv.Server.ListenAndServe()
+	if err := serv.Server.ListenAndServe(); err != nil {
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+// Stop останавливает HTTP-сервер.
+func (serv *Server) Stop() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := serv.Server.Shutdown(ctx); err != nil {
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }

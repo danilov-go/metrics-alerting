@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/hmac"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,7 +21,7 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-func (a *Agent) send(ctx context.Context, metrics []models.Metrics) {
+func (a *Agent) send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey) {
 	jsonMetric, err := json.Marshal(metrics)
 	if err != nil {
 		a.logger.Errorw("ошибка сериализации", "err", err)
@@ -45,6 +49,16 @@ func (a *Agent) send(ctx context.Context, metrics []models.Metrics) {
 		return
 	}
 	body := buf.Bytes()
+	var cipherKey []byte
+	var cipherBody []byte
+	if publicKey != nil {
+		cipherBody, cipherKey, err = encrypt(publicKey, body)
+		if err != nil {
+			a.logger.Errorw("ошибка шифрования", "error", err)
+			return
+		}
+		body = cipherBody
+	}
 	const maxRetries = 3
 	duration := 1
 	var response *resty.Response
@@ -55,6 +69,9 @@ func (a *Agent) send(ctx context.Context, metrics []models.Metrics) {
 			SetBody(body)
 		if a.key != "" {
 			res.SetHeader("HashSHA256", hash)
+		}
+		if publicKey != nil {
+			res.SetHeader("Crypto-Key", hex.EncodeToString(cipherKey))
 		}
 		response, err = res.Post("/updates/")
 		if err == nil {
@@ -86,4 +103,29 @@ func (a *Agent) send(ctx context.Context, metrics []models.Metrics) {
 		a.logger.Errorw("статус запроса:", "status", response.StatusCode())
 		return
 	}
+}
+
+func encrypt(publicKey *rsa.PublicKey, body []byte) ([]byte, []byte, error) {
+	aesKey := make([]byte, 32)
+	if _, err := rand.Read(aesKey); err != nil {
+		return nil, nil, err
+	}
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	gsm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, err
+	}
+	nonce := make([]byte, gsm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, nil, err
+	}
+	cipherBody := gsm.Seal(nonce, nonce, body, nil)
+	cipherKey, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, publicKey, aesKey, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cipherBody, cipherKey, nil
 }

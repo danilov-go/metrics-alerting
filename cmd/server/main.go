@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	_ "net/http/pprof"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/audit"
@@ -14,7 +17,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/server"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-resty/resty/v2"
-	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -44,9 +47,8 @@ func main() {
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
 	}
-	configs.Get()
-	if configs.ValidDB && configs.DatabaseDSN == "" {
-		panic("DatabaseDSN передан, но является пустым")
+	if err := configs.Get(); err != nil {
+		logger.Log.Sugar().Fatal("ошибка загрузки конфигурации сервера")
 	}
 	cfg := repository.ConfigFile{
 		Path:     configs.FileStoragePath,
@@ -55,23 +57,24 @@ func main() {
 	}
 	var pg handler.Storage
 	var dbErr error
-	if configs.ValidDB {
+	if configs.DatabaseDSN != "" {
 		pg, dbErr = db.InitDB(configs.DatabaseDSN)
-		if dbErr != nil {
-			logger.Log.Info("не удалось подключится к базе данных, переключаемся на memstorage", zap.Error(dbErr))
-		}
 	}
-	if configs.ValidDB && dbErr == nil && pg != nil {
+	if dbErr == nil && pg != nil {
 		duration := time.Duration(configs.RetryDuration) * time.Second
 		interval := time.Duration(configs.RetryInterval) * time.Second
 		storage = handler.NewErrorMiddleware(pg, duration, interval)
 	} else {
 		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
 	}
-	logger.Log.Sugar().Info("Key", configs.Key)
+	defer func() {
+		if err := storage.Close(); err != nil {
+			logger.Log.Sugar().Errorw("ошибка закрытия хралища", "error", err)
+		}
+	}()
 	client := resty.New().
 		SetTimeout(5 * time.Second).
-		SetRetryCount(configs.RetryDuration).
+		SetRetryCount(int(configs.RetryDuration)).
 		SetRetryWaitTime(time.Duration(configs.RetryInterval) * time.Second).
 		AddRetryCondition(
 			func(r *resty.Response, err error) bool {
@@ -83,7 +86,7 @@ func main() {
 		)
 	event := audit.NewEvent(logger.Log.Sugar())
 	var validAudit bool
-	if configs.ValidFileAudit {
+	if configs.AuditFile != "" {
 		sub := audit.NewFileSubscriber(configs.AuditFile, logger.Log.Sugar())
 		if sub != nil {
 			event.Register(sub)
@@ -95,7 +98,7 @@ func main() {
 			validAudit = true
 		}
 	}
-	if configs.ValidURLAudit {
+	if configs.AuditURL != "" {
 		sub := audit.NewURLSubscriber(configs.AuditURL, logger.Log.Sugar(), client)
 		if sub != nil {
 			event.Register(sub)
@@ -106,6 +109,13 @@ func main() {
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
 	r.Use(handler.RequestLogger(logger.Log))
+	if configs.CryptoKey != "" {
+		privatKey, err := configs.GetKey()
+		if err != nil {
+			logger.Log.Sugar().Fatal("ошибка загрузки или парсинга приватного ключа сервера")
+		}
+		r.Use(handler.CryptoMiddleware(privatKey))
+	}
 	r.Use(handler.GzipMiddleware)
 	r.Use(handler.HashMiddleware(configs.Key))
 	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
@@ -125,11 +135,21 @@ func main() {
 	})
 	go func() {
 		if err := http.ListenAndServe(":8081", nil); err != nil {
-			logger.Log.Sugar().Errorw("ошибка запуска pprof сервера", "error", err)
+			logger.Log.Sugar().Errorw("ошибка запуска pprof сервера", "err", err)
 		}
 	}()
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
-	if err := serv.Run(); err != nil {
-		panic(err)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	defer stop()
+	g, gCtx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return serv.Run()
+	})
+	g.Go(func() error {
+		<-gCtx.Done()
+		return serv.Stop()
+	})
+	if err := g.Wait(); err != nil {
+		logger.Log.Sugar().Fatal("сервер аварийно завершил работу", "err", err)
 	}
 }

@@ -4,7 +4,7 @@ package agent
 
 import (
 	"context"
-	"fmt"
+	"crypto/rsa"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,29 +34,28 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 	client := resty.New()
 	client.SetTimeout(time.Second * 1)
 	client.SetBaseURL("http://" + cfg.Net.String())
-	fmt.Println(cfg.Net.String())
 	return &Agent{
 		Client:         client,
 		logger:         l,
 		key:            cfg.Key,
-		pollInterval:   cfg.PollInterval,
-		reportInterval: cfg.ReportInterval,
+		pollInterval:   int(cfg.PollInterval),
+		reportInterval: int(cfg.ReportInterval),
 		rateLimit:      cfg.RateLimit,
 	}
 }
 
 // Run запускает процесс сбора и отправки метрик на сервер.
-func (a *Agent) Run(ctx context.Context) {
+func (a *Agent) Run(ctx context.Context, publicKey *rsa.PublicKey) {
 	var wg sync.WaitGroup
 	gopsutilChan := a.getGopsutil(ctx, &wg)
 	runtimeChan := a.getRuntime(ctx, &wg)
 	metricChan := a.merge(ctx, &wg, gopsutilChan, runtimeChan)
-	a.worker(ctx, &wg, metricChan)
+	a.worker(ctx, &wg, metricChan, publicKey)
 	<-ctx.Done()
 	wg.Wait()
 }
 
-func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan []models.Metrics) {
+func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan []models.Metrics, publicKey *rsa.PublicKey) {
 	for i := 0; i < a.rateLimit; i++ {
 		wg.Add(1)
 		go func() {
@@ -65,7 +64,7 @@ func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan
 				if len(ch) == 0 {
 					continue
 				}
-				a.send(ctx, ch)
+				a.send(ctx, ch, publicKey)
 			}
 		}()
 	}
@@ -83,6 +82,9 @@ func (a *Agent) merge(ctx context.Context, wg *sync.WaitGroup, gopsutilChan, run
 		for {
 			select {
 			case <-ctx.Done():
+				if len(metrics) > 0 {
+					metricsChan <- metrics
+				}
 				return
 			case metric, ok := <-gopsutilChan:
 				if !ok {

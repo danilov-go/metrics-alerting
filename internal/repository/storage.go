@@ -239,3 +239,10 @@ func (m *MemStorage) run() {
 		}
 	}(ticker)
 }
+
+// Close выполняет принудительное сохранение текущих метрик на диск при закрытии сервера.
+func (m *MemStorage) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.save()
+}
