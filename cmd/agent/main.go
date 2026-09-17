@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -18,7 +19,7 @@ var (
 )
 
 func main() {
-	config.PrintBuild(buildVersion, buildDate, buildCommit)
+	config.PrintBuild(os.Stdout, buildVersion, buildDate, buildCommit)
 	configs := &config.ConfigAgent{
 		Net: config.NetAddress{
 			Host: "localhost",

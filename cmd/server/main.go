@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	_ "net/http/pprof"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -19,7 +20,7 @@ var (
 )
 
 func main() {
-	config.PrintBuild(buildVersion, buildDate, buildCommit)
+	config.PrintBuild(os.Stdout, buildVersion, buildDate, buildCommit)
 	configs := config.ConfigServer{
 		Net: config.NetAddress{
 			Host: "localhost",

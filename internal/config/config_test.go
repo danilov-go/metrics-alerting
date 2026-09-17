@@ -1,16 +1,23 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
-	optionSet  string = "Set"
-	optionText string = "UnmarshalText"
-	optionJSON string = "Unmarshal"
+	optionSet    string = "Set"
+	optionText   string = "UnmarshalText"
+	optionJSON   string = "Unmarshal"
+	optionAgent  string = "Agent"
+	optionServer string = "Server"
 )
 
 func TestNetAddress(t *testing.T) {
@@ -218,6 +225,8 @@ func TestDurationSeconds(t *testing.T) {
 				err = d.UnmarshalText([]byte(tt.input))
 			case optionJSON:
 				err = json.Unmarshal([]byte(tt.input), &d)
+			default:
+				t.Fatalf("неизвестная опция: %s", tt.option)
 			}
 			if tt.exp.err {
 				assert.Error(t, err)
@@ -228,6 +237,191 @@ func TestDurationSeconds(t *testing.T) {
 			if tt.exp.str != "" {
 				assert.Equal(t, tt.exp.str, d.String())
 			}
+		})
+	}
+}
+
+func TestLoadJSON(t *testing.T) {
+	tests := []struct {
+		name        string
+		option      string
+		jsonConfig  string
+		expError    bool
+		invalidPath bool
+		expConfig   any
+	}{
+		{
+			name:   "положительный тест (сервер)",
+			option: optionServer,
+			jsonConfig: `
+			{
+				"address": "localhost:8080",
+				"restore": true, 
+				"store_interval": "1s",
+				"store_file": "/path/to/file.db",
+				"database_dsn": "test", 
+				"crypto_key": "/path/to/key.pem", 
+				"trusted_subnet": "192.168.1.0/24"
+			}`,
+			expError: false,
+			expConfig: &ConfigServer{
+				Net: NetAddress{
+					Host: "localhost",
+					Port: 8080,
+				},
+				Restore:         true,
+				StoreIntrval:    1,
+				FileStoragePath: "/path/to/file.db",
+				DatabaseDSN:     "test",
+				CryptoKey:       "/path/to/key.pem",
+				TrustedSubnet:   "192.168.1.0/24",
+			},
+		},
+		{
+			name:   "положительный тест (агент)",
+			option: optionAgent,
+			jsonConfig: `
+			{
+				"address": "localhost:8080", 
+				"report_interval": "1s",
+				"poll_interval": "1s", 
+				"crypto_key": "/path/to/key.pem" 
+			}`,
+			expError: false,
+			expConfig: &ConfigAgent{
+				Net: NetAddress{
+					Host: "localhost",
+					Port: 8080,
+				},
+				ReportInterval: 1,
+				PollInterval:   1,
+				CryptoKey:      "/path/to/key.pem",
+			},
+		},
+		{
+			name:        "невалидный путь",
+			option:      optionServer,
+			jsonConfig:  `{}`,
+			invalidPath: true,
+			expError:    true,
+			expConfig:   nil,
+		},
+		{
+			name:   "ошибка JSON",
+			option: optionServer,
+			jsonConfig: `
+			{
+				"address": "localhost:8080",
+				"restore": "123"
+			}`,
+			invalidPath: false,
+			expError:    true,
+			expConfig:   nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var configPath string
+			if tt.invalidPath {
+				configPath = filepath.Join(t.TempDir(), "unknow.json")
+			} else {
+				testDir := t.TempDir()
+				configPath = filepath.Join(testDir, "config.json")
+				err := os.WriteFile(configPath, []byte(tt.jsonConfig), 0644)
+				require.NoError(t, err)
+			}
+			var expErr error
+			var config any
+			switch tt.option {
+			case optionAgent:
+				cfg := ConfigAgent{}
+				expErr = LoadJSON(configPath, &cfg)
+				config = &cfg
+			case optionServer:
+				cfg := ConfigServer{}
+				expErr = LoadJSON(configPath, &cfg)
+				config = &cfg
+			default:
+				t.Fatalf("неизвестная опция: %s", tt.option)
+			}
+			if tt.expError {
+				assert.Error(t, expErr)
+			} else {
+				assert.NoError(t, expErr)
+				assert.Equal(t, tt.expConfig, config)
+			}
+		})
+	}
+}
+
+func TestPrintBuild(t *testing.T) {
+	tmpl := "Build version: %s\nBuild date: %s\nBuild commit: %s\n"
+	tests := []struct {
+		name    string
+		version string
+		date    string
+		commit  string
+	}{
+		{
+			name:    "передача параметров сборки",
+			version: "v1.2.3",
+			date:    "2026-09-16",
+			commit:  "testcomit",
+		},
+		{
+			name:    "без передачи параметров",
+			version: "N/A",
+			date:    "N/A",
+			commit:  "N/A",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			expData := fmt.Sprintf(tmpl, tt.version, tt.date, tt.commit)
+			PrintBuild(&buf, tt.version, tt.date, tt.commit)
+			assert.Equal(t, expData, buf.String())
+		})
+	}
+}
+
+func TestGetPath(t *testing.T) {
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+	tests := []struct {
+		name     string
+		args     []string
+		envSetup map[string]string
+		expected string
+	}{
+		{
+			name: "положительный тест (env)",
+			args: []string{"cmd", "-c", "flag_path.json"},
+			envSetup: map[string]string{
+				"CONFIG": "env_path.json",
+			},
+			expected: "env_path.json",
+		},
+		{
+			name:     "положительный тест (flag)",
+			args:     []string{"cmd", "-config", "flag_path.json"},
+			expected: "flag_path.json",
+		},
+		{
+			name:     "флаг без пути",
+			args:     []string{"cmd", "-c"},
+			expected: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetEnv(t)
+			for k, v := range tt.envSetup {
+				t.Setenv(k, v)
+			}
+			os.Args = tt.args
+			assert.Equal(t, tt.expected, GetPath())
+			resetEnv(t)
 		})
 	}
 }
