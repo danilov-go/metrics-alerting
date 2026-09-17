@@ -73,6 +73,9 @@ func (a *Agent) send(ctx context.Context, metrics []models.Metrics, publicKey *r
 		if publicKey != nil {
 			res.SetHeader("Crypto-Key", hex.EncodeToString(cipherKey))
 		}
+		if a.host != "" {
+			res.SetHeader("X-Real-IP", a.host)
+		}
 		response, err = res.Post("/updates/")
 		if err == nil {
 			break

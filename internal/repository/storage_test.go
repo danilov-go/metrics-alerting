@@ -11,6 +11,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
@@ -489,4 +490,19 @@ func TestMemStorage_LoadFile(t *testing.T) {
 	delta, ok := storage.Counters["PollCount"]
 	assert.True(t, ok)
 	assert.Equal(t, int64(5), delta)
+}
+
+func TestMemStorage_Close(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	testPath := filepath.Join(t.TempDir(), "test.txt")
+	cfg := repository.ConfigFile{
+		Path:     testPath,
+		Interval: 0,
+		Restore:  false,
+	}
+	storage := repository.InitMemStorage(cfg, logger.Sugar())
+	err := storage.Close()
+	assert.NoError(t, err)
+	_, err = os.Stat(testPath)
+	require.NoError(t, err)
 }

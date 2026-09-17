@@ -17,15 +17,22 @@ import (
 func TestGzipMiddleware(t *testing.T) {
 	body := "test gzip"
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		assert.NoError(t, err)
 		w.WriteHeader(http.StatusOK)
-		_, err := w.Write([]byte(body))
+		_, err = w.Write([]byte(body))
 		assert.NoError(t, err)
 	})
 	h := handler.GzipMiddleware(next)
+	var gzipBuf bytes.Buffer
+	gz := gzip.NewWriter(&gzipBuf)
+	_, _ = gz.Write([]byte(body))
+	_ = gz.Close()
 	tests := []struct {
 		name            string
 		acceptEncoding  string
 		contentEncoding string
+		compresBody     []byte
 		wantCode        int
 		wantErr         bool
 	}{
@@ -48,10 +55,22 @@ func TestGzipMiddleware(t *testing.T) {
 			wantCode:        http.StatusInternalServerError,
 			wantErr:         false,
 		},
+		{
+			name:            "успешная распаковка gzip",
+			acceptEncoding:  "",
+			contentEncoding: "gzip",
+			compresBody:     gzipBuf.Bytes(),
+			wantCode:        http.StatusOK,
+			wantErr:         false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/test-gzip", bytes.NewReader([]byte("plain text")))
+			reqBody := []byte(body)
+			if tt.compresBody != nil {
+				reqBody = tt.compresBody
+			}
+			req := httptest.NewRequest(http.MethodPost, "/test-gzip", bytes.NewReader(reqBody))
 			if tt.acceptEncoding != "" {
 				req.Header.Set("Accept-Encoding", tt.acceptEncoding)
 			}

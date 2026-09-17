@@ -469,3 +469,41 @@ func Test_storageDB_Ping(t *testing.T) {
 		})
 	}
 }
+
+func Test_storageDB_Close(t *testing.T) {
+	tests := []struct {
+		name      string
+		nilDB     bool
+		setupMock func(mock sqlmock.Sqlmock)
+	}{
+		{
+			name:  "положительный тест",
+			nilDB: false,
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectClose()
+			},
+		},
+		{
+			name:      "закрытие при db = nil",
+			nilDB:     true,
+			setupMock: func(mock sqlmock.Sqlmock) {},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.nilDB {
+				storage := db.NewStorageDB(nil)
+				err := storage.Close()
+				assert.NoError(t, err)
+			} else {
+				sql, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+				assert.NoError(t, err)
+				defer func() { _ = sql.Close() }()
+				tt.setupMock(mock)
+				storage := db.NewStorageDB(sql)
+				err = storage.Close()
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

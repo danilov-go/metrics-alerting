@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -122,8 +123,8 @@ func LoadJSON[T any](path string, t *T) error {
 }
 
 // PrintBuild выводит в консоль информацию о текущей сборке приложения.
-func PrintBuild(version, date, commit string) {
-	fmt.Printf("Build version: %s\n", version)
-	fmt.Printf("Build date: %s\n", date)
-	fmt.Printf("Build commit: %s\n", commit)
+func PrintBuild(w io.Writer, version, date, commit string) {
+	fmt.Fprintf(w, "Build version: %s\n", version)
+	fmt.Fprintf(w, "Build date: %s\n", date)
+	fmt.Fprintf(w, "Build commit: %s\n", commit)
 }
