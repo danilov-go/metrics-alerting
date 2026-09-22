@@ -12,8 +12,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"net"
 	"net/http"
 	"time"
 
@@ -21,7 +19,33 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-func (a *Agent) send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey) {
+// HTTPSender отправляет метрики на сервер по протоколу HTTP.
+type HTTPSender struct {
+	client *resty.Client
+	logger log
+	key    string
+	host   string
+}
+
+// NewHTTPSender создает экзепляр HTTPSender.
+func NewHTTPSender(serverURL string, key string, hostIP string, l log) *HTTPSender {
+	client := resty.New().
+		SetTimeout(time.Second * 1).
+		SetBaseURL("http://" + serverURL).
+		SetRetryCount(3).
+		SetRetryAfter(func(c *resty.Client, r *resty.Response) (time.Duration, error) {
+			return time.Duration(1+2*(r.Request.Attempt-1)) * time.Second, nil
+		})
+	return &HTTPSender{
+		client: client,
+		logger: l,
+		key:    key,
+		host:   hostIP,
+	}
+}
+
+// Send преобразует и отправляет метрики на HTTP-сервер.
+func (a *HTTPSender) Send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey) {
 	jsonMetric, err := json.Marshal(metrics)
 	if err != nil {
 		a.logger.Errorw("ошибка сериализации", "err", err)
@@ -59,47 +83,28 @@ func (a *Agent) send(ctx context.Context, metrics []models.Metrics, publicKey *r
 		}
 		body = cipherBody
 	}
-	const maxRetries = 3
-	duration := 1
-	var response *resty.Response
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		res := a.Client.R().
-			SetHeader("Content-Type", "application/json").
-			SetHeader("Content-Encoding", "gzip").
-			SetBody(body)
-		if a.key != "" {
-			res.SetHeader("HashSHA256", hash)
-		}
-		if publicKey != nil {
-			res.SetHeader("Crypto-Key", hex.EncodeToString(cipherKey))
-		}
-		if a.host != "" {
-			res.SetHeader("X-Real-IP", a.host)
-		}
-		response, err = res.Post("/updates/")
-		if err == nil {
-			break
-		}
-		if attempt == maxRetries {
-			a.logger.Errorw("попытки отправки исчерпаны", "maxRetries", maxRetries)
-			return
-		}
-		var netErr net.Error
-		if errors.As(err, &netErr) {
-			timer := time.NewTimer(time.Duration(duration) * time.Second)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
-			timer.Stop()
-			duration += 2
-			continue
-		}
+	req := a.client.R().
+		SetContext(ctx).
+		SetHeader("Content-Type", "application/json").
+		SetHeader("Content-Encoding", "gzip").
+		SetBody(body)
+
+	if a.key != "" {
+		req.SetHeader("HashSHA256", hash)
+	}
+	if publicKey != nil {
+		req.SetHeader("Crypto-Key", hex.EncodeToString(cipherKey))
+	}
+	if a.host != "" {
+		req.SetHeader("X-Real-IP", a.host)
+	}
+	response, err := req.Post("/updates/")
+	if err != nil {
+		a.logger.Errorw("попытки отправки исчерпаны", "error", err)
+		return
 	}
 	if response == nil {
-		a.logger.Errorw("не удалось получить ответ от сервера", "error", err)
+		a.logger.Errorw("не удалось получить ответ от сервера: response равен nil")
 		return
 	}
 	if response.StatusCode() != http.StatusOK {
@@ -131,4 +136,8 @@ func encrypt(publicKey *rsa.PublicKey, body []byte) ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 	return cipherBody, cipherKey, nil
+}
+
+func (a *HTTPSender) Close() error {
+	return nil
 }

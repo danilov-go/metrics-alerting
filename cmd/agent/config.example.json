@@ -2,5 +2,6 @@
   "address": "localhost:8080",
   "report_interval": "1s",
   "poll_interval": "1s",
-  "crypto_key": "certs/public.pem"
+  "crypto_key": "certs/public.pem",
+  "grpc_address": "localhost:8081"
 }

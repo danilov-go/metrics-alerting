@@ -36,6 +36,7 @@ func main() {
 		TrustedSubnet:   "",
 		RetryDuration:   1,
 		RetryInterval:   2,
+		GrpcAddress:     "",
 	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
@@ -57,7 +58,15 @@ func main() {
 	if urlSub != nil {
 		defer urlSub.Close()
 	}
-	r := initRouter(configs, storage, event, fileSub, urlSub)
+	ipNet, err := config.ParseTrustedSubnet(configs.TrustedSubnet)
+	if err != nil {
+		logger.Log.Sugar().Fatal("ошибка парсинга TrustedSubnet")
+	}
+	grpcServ, err := initGRPC(configs, ipNet, storage, logger.Log)
+	if err != nil {
+		logger.Log.Sugar().Fatalw("ошибка инициализации gRPC сервера", "error", err)
+	}
+	r := initRouter(configs, storage, event, fileSub, urlSub, ipNet)
 	runProffServer()
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
@@ -70,6 +79,15 @@ func main() {
 		<-gCtx.Done()
 		return serv.Stop()
 	})
+	if grpcServ != nil {
+		g.Go(func() error {
+			return grpcServ.Run()
+		})
+		g.Go(func() error {
+			<-gCtx.Done()
+			return grpcServ.Stop()
+		})
+	}
 	if err := g.Wait(); err != nil {
 		logger.Log.Sugar().Fatal("сервер аварийно завершил работу", "err", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -120,6 +121,20 @@ func LoadJSON[T any](path string, t *T) error {
 		return err
 	}
 	return nil
+}
+
+func GetHost(adr string) (string, error) {
+	conn, err := net.Dial("udp", adr)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	localAddr := conn.LocalAddr()
+	host, _, err := net.SplitHostPort(localAddr.String())
+	if err != nil {
+		return "", err
+	}
+	return host, nil
 }
 
 // PrintBuild выводит в консоль информацию о текущей сборке приложения.

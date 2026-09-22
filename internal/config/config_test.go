@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -261,7 +263,8 @@ func TestLoadJSON(t *testing.T) {
 				"store_file": "/path/to/file.db",
 				"database_dsn": "test", 
 				"crypto_key": "/path/to/key.pem", 
-				"trusted_subnet": "192.168.1.0/24"
+				"trusted_subnet": "192.168.1.0/24",
+				"grpc_address": "localhost:8081"
 			}`,
 			expError: false,
 			expConfig: &ConfigServer{
@@ -275,6 +278,7 @@ func TestLoadJSON(t *testing.T) {
 				DatabaseDSN:     "test",
 				CryptoKey:       "/path/to/key.pem",
 				TrustedSubnet:   "192.168.1.0/24",
+				GrpcAddress:     "localhost:8081",
 			},
 		},
 		{
@@ -285,7 +289,8 @@ func TestLoadJSON(t *testing.T) {
 				"address": "localhost:8080", 
 				"report_interval": "1s",
 				"poll_interval": "1s", 
-				"crypto_key": "/path/to/key.pem" 
+				"crypto_key": "/path/to/key.pem",
+				"grpc_address": "localhost:8081"
 			}`,
 			expError: false,
 			expConfig: &ConfigAgent{
@@ -296,6 +301,7 @@ func TestLoadJSON(t *testing.T) {
 				ReportInterval: 1,
 				PollInterval:   1,
 				CryptoKey:      "/path/to/key.pem",
+				GrpcAddress:    "localhost:8081",
 			},
 		},
 		{
@@ -313,6 +319,18 @@ func TestLoadJSON(t *testing.T) {
 			{
 				"address": "localhost:8080",
 				"restore": "123"
+			}`,
+			invalidPath: false,
+			expError:    true,
+			expConfig:   nil,
+		},
+		{
+			name:   "ошибка JSON",
+			option: optionServer,
+			jsonConfig: `
+			{
+				"address": "localhost:8080",
+				"store_interval": []
 			}`,
 			invalidPath: false,
 			expError:    true,
@@ -365,7 +383,7 @@ func TestPrintBuild(t *testing.T) {
 		{
 			name:    "передача параметров сборки",
 			version: "v1.2.3",
-			date:    "2026-09-16",
+			date:    time.Now().Format(time.DateOnly),
 			commit:  "testcomit",
 		},
 		{
@@ -422,6 +440,47 @@ func TestGetPath(t *testing.T) {
 			os.Args = tt.args
 			assert.Equal(t, tt.expected, GetPath())
 			resetEnv(t)
+		})
+	}
+}
+
+func TestGetHost(t *testing.T) {
+	packetConn, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer packetConn.Close()
+	validAddr := packetConn.LocalAddr().String()
+	tests := []struct {
+		name   string
+		adr    string
+		expErr bool
+	}{
+		{
+			name:   "положительный тест",
+			adr:    validAddr,
+			expErr: false,
+		},
+
+		{
+			name:   "некорректный формат порта",
+			adr:    "localhost:invalid",
+			expErr: true,
+		},
+		{
+			name:   "пустой адрес",
+			adr:    "",
+			expErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			host, err := GetHost(tt.adr)
+			if tt.expErr {
+				assert.Error(t, err)
+				assert.Empty(t, host)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, host)
+			}
 		})
 	}
 }

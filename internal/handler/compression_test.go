@@ -17,6 +17,7 @@ import (
 func TestGzipMiddleware(t *testing.T) {
 	body := "test gzip"
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Test-Compression", "test")
 		_, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		w.WriteHeader(http.StatusOK)

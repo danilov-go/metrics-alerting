@@ -108,11 +108,14 @@ func TestAgent_Run(t *testing.T) {
 		Key:            "",
 	}
 	a := New(cfg, logger.Sugar())
-	a.Client.SetBaseURL(server.URL)
-	a.Client.SetTimeout(5 * time.Second)
+	if httpSender, ok := a.Sender.(*HTTPSender); ok {
+		httpSender.client.SetBaseURL(server.URL)
+		httpSender.client.SetTimeout(5 * time.Second)
+	}
 	assert.NoError(t, err)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(t.Context())
+	assert.NoError(t, err)
 	go a.Run(ctx, nil)
 	time.Sleep(3 * time.Second)
 	cancel()

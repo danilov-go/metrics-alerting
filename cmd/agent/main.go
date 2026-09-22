@@ -46,5 +46,6 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	defer stop()
 	client := agent.New(*configs, logger.Log.Sugar())
+	defer func() { _ = client.Sender.Close() }()
 	client.Run(ctx, publicKey)
 }

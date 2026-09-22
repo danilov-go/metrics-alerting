@@ -36,6 +36,7 @@ func TestConfigServer_Get(t *testing.T) {
 				"-audit-file", "test_flag.log",
 				"-audit-url", "test_flag",
 				"-t", "192.168.1.0/24",
+				"-g", "localhost:8081",
 				"-r", "true",
 			},
 			wantErr: false,
@@ -48,6 +49,7 @@ func TestConfigServer_Get(t *testing.T) {
 				AuditURL:        "test_flag",
 				TrustedSubnet:   "192.168.1.0/24",
 				Restore:         true,
+				GrpcAddress:     "localhost:8081",
 			},
 		},
 		{
@@ -61,6 +63,7 @@ func TestConfigServer_Get(t *testing.T) {
 				"-audit-file", "test_flag.log",
 				"-audit-url", "test_flag",
 				"-t", "192.168.1.0/24",
+				"-g", "localhost:8081",
 				"-r", "true",
 			},
 			envSetup: map[string]string{
@@ -72,6 +75,7 @@ func TestConfigServer_Get(t *testing.T) {
 				"AUDIT_URL":         "test_env",
 				"TRUSTED_SUBNET":    "192.168.1.0/25",
 				"RESTORE":           "false",
+				"GRPC_ADDRESS":      "localhost:8082",
 			},
 			wantErr: false,
 			want: ConfigServer{
@@ -83,6 +87,7 @@ func TestConfigServer_Get(t *testing.T) {
 				AuditURL:        "test_env",
 				TrustedSubnet:   "192.168.1.0/25",
 				Restore:         false,
+				GrpcAddress:     "localhost:8082",
 			},
 		},
 	}
@@ -93,7 +98,7 @@ func TestConfigServer_Get(t *testing.T) {
 				t.Setenv(k, v)
 			}
 			os.Args = tt.args
-			cfg := tt.initialConfig
+			var cfg ConfigServer
 			err := cfg.Get()
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -124,6 +129,7 @@ func resetEnv(t *testing.T) {
 		"POLL_INTERVAL",
 		"REPORT_INTERVAL",
 		"RATE_LIMIT",
+		"GRPC_ADDRESS",
 	}
 	for _, env := range envs {
 		if err := os.Unsetenv(env); err != nil {
@@ -194,6 +200,54 @@ func TestConfigServer_GetKey(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, expKey, privateKey)
+			}
+		})
+	}
+}
+
+func TestParseTrustedSubnet(t *testing.T) {
+	tests := []struct {
+		name          string
+		trustedSubnet string
+		expNet        string
+		wantErr       bool
+	}{
+		{
+			name:          "положительный тест",
+			trustedSubnet: "192.168.1.0/24",
+			expNet:        "192.168.1.0/24",
+			wantErr:       false,
+		},
+		{
+			name:          "пустая строка",
+			trustedSubnet: "",
+			expNet:        "",
+			wantErr:       false,
+		},
+		{
+			name:          "передан IP без маски",
+			trustedSubnet: "192.168.1.0",
+			wantErr:       true,
+		},
+		{
+			name:          "некорректный формат маски",
+			trustedSubnet: "192.168.1.0/72",
+			wantErr:       true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ipNet, err := ParseTrustedSubnet(tt.trustedSubnet)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, ipNet)
+			} else {
+				assert.NoError(t, err)
+				if tt.trustedSubnet == "" {
+					assert.Nil(t, ipNet)
+				} else {
+					assert.Equal(t, tt.expNet, ipNet.String())
+				}
 			}
 		})
 	}

@@ -114,6 +114,7 @@ func TestAuditMiddleware(t *testing.T) {
 				t.Fatalf("неизвестная опция: %s", tt.option)
 			}
 			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Test-Audit", "test")
 				w.WriteHeader(tt.status)
 			})
 			h := AuditMiddleware(event)(next)

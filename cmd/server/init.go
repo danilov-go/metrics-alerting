@@ -5,6 +5,10 @@ import (
 	"net/http"
 	"time"
 
+	pb "github.com/danilov-go/metrics-alerting.git/internal/proto"
+	"github.com/danilov-go/metrics-alerting.git/internal/server"
+	"go.uber.org/zap"
+
 	"github.com/danilov-go/metrics-alerting.git/internal/audit"
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
@@ -13,6 +17,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-resty/resty/v2"
+	"google.golang.org/grpc"
 )
 
 func initStorage(configs config.ConfigServer) handler.Storage {
@@ -34,14 +39,10 @@ func initStorage(configs config.ConfigServer) handler.Storage {
 	return repository.InitMemStorage(cfg, logger.Log.Sugar())
 }
 
-func initRouter(configs config.ConfigServer, storage handler.Storage, event *audit.Event, fileSub *audit.FileSubscriber, urlSub *audit.URLSubscriber) chi.Router {
+func initRouter(configs config.ConfigServer, storage handler.Storage, event *audit.Event, fileSub *audit.FileSubscriber, urlSub *audit.URLSubscriber, ipNet *net.IPNet) chi.Router {
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
-	if configs.TrustedSubnet != "" {
-		_, ipNet, err := net.ParseCIDR(configs.TrustedSubnet)
-		if err != nil {
-			logger.Log.Sugar().Fatal("ошибка парсинга TrustedSubnet", "error", err)
-		}
+	if ipNet != nil {
 		r.Use(handler.TrustedMiddleware(ipNet))
 	}
 	r.Use(handler.RequestLogger(logger.Log))
@@ -113,4 +114,21 @@ func runProffServer() {
 			logger.Log.Sugar().Errorw("ошибка запуска pprof сервера", "err", err)
 		}
 	}()
+}
+
+func initGRPC(configs config.ConfigServer, iPNet *net.IPNet, storage handler.Storage, l *zap.Logger) (*server.GRPCServer, error) {
+	if configs.GrpcAddress == "" {
+		return nil, nil
+	}
+	listen, err := net.Listen("tcp", configs.GrpcAddress)
+	if err != nil {
+		return nil, err
+	}
+	gServ := grpc.NewServer(
+		grpc.UnaryInterceptor(handler.UnaryInterceptor(iPNet)),
+	)
+	h := handler.NewGRPCHandler(storage, l.Sugar())
+	pb.RegisterMetricsServer(gServ, h)
+	serv := server.NewGRPC(configs.GrpcAddress, l.Sugar(), gServ, listen)
+	return serv, nil
 }

@@ -5,64 +5,61 @@ package agent
 import (
 	"context"
 	"crypto/rsa"
-	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
-	"github.com/go-resty/resty/v2"
 )
+
+// MetricSender определяет общий интерфейс для отправки метрик.
+type MetricSender interface {
+	Send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey)
+	Close() error
+}
 
 type log interface {
 	Errorw(msg string, keysAndValues ...any)
+	Fatalw(msg string, keysAndValues ...any)
 }
 
 // Agent собирает метрики runtime/gopsutil и передает их на сервер.
 type Agent struct {
-	Client         *resty.Client
+	Sender         MetricSender
 	logger         log
-	key            string
 	pollInterval   int
 	reportInterval int
 	rateLimit      int
 	pollCount      atomic.Int64
-	host           string
 }
 
 // New создает новый экземпляр Agent.
 func New(cfg config.ConfigAgent, l log) *Agent {
-	client := resty.New()
-	client.SetTimeout(time.Second * 1)
-	client.SetBaseURL("http://" + cfg.Net.String())
-	host, err := getHost(cfg.Net.String())
-	if err != nil {
-		l.Errorw("ошибка получения host агента", "error", err)
-	}
-	return &Agent{
-		Client:         client,
+	agent := &Agent{
 		logger:         l,
-		key:            cfg.Key,
 		pollInterval:   int(cfg.PollInterval),
 		reportInterval: int(cfg.ReportInterval),
 		rateLimit:      cfg.RateLimit,
-		host:           host,
 	}
-}
-
-func getHost(adr string) (string, error) {
-	conn, err := net.Dial("udp", adr)
+	if cfg.GrpcAddress != "" {
+		host, err := config.GetHost(cfg.GrpcAddress)
+		if err != nil {
+			l.Fatalw("ошибка получения host агента", "error", err)
+		}
+		grpcSender, err := NewGRPCSender(cfg.GrpcAddress, host, l)
+		if err != nil {
+			l.Fatalw("не удалось инициализировать gRPC клиент", "error", err)
+		}
+		agent.Sender = grpcSender
+		return agent
+	}
+	host, err := config.GetHost(cfg.Net.String())
 	if err != nil {
-		return "", err
+		l.Fatalw("ошибка получения host агента", "error", err)
 	}
-	defer conn.Close()
-	localAddr := conn.LocalAddr()
-	host, _, err := net.SplitHostPort(localAddr.String())
-	if err != nil {
-		return "", err
-	}
-	return host, nil
+	agent.Sender = NewHTTPSender(cfg.Net.String(), cfg.Key, host, l)
+	return agent
 }
 
 // Run запускает процесс сбора и отправки метрик на сервер.
@@ -85,7 +82,7 @@ func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan
 				if len(ch) == 0 {
 					continue
 				}
-				a.send(ctx, ch, publicKey)
+				a.Sender.Send(ctx, ch, publicKey)
 			}
 		}()
 	}

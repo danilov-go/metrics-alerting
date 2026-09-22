@@ -33,6 +33,7 @@ func TestConfigAgent_Get(t *testing.T) {
 				"-k", "test_flag_key",
 				"-crypto-key", "test_flag.pem",
 				"-l", "5",
+				"-g", "localhost:8081",
 			},
 			wantErr: false,
 			want: ConfigAgent{
@@ -41,6 +42,7 @@ func TestConfigAgent_Get(t *testing.T) {
 				Key:            "test_flag_key",
 				CryptoKey:      "test_flag.pem",
 				RateLimit:      5,
+				GrpcAddress:    "localhost:8081",
 			},
 		},
 		{
@@ -52,6 +54,7 @@ func TestConfigAgent_Get(t *testing.T) {
 				"-k", "test_flag_key",
 				"-crypto-key", "test_flag.pem",
 				"-l", "5",
+				"-g", "localhost:8081",
 			},
 			envSetup: map[string]string{
 				"POLL_INTERVAL":   "5",
@@ -59,6 +62,7 @@ func TestConfigAgent_Get(t *testing.T) {
 				"KEY":             "test_env_key",
 				"CRYPTO_KEY":      "test_env.pem",
 				"RATE_LIMIT":      "15",
+				"GRPC_ADDRESS":    "localhost:8082",
 			},
 			wantErr: false,
 			want: ConfigAgent{
@@ -67,6 +71,7 @@ func TestConfigAgent_Get(t *testing.T) {
 				Key:            "test_env_key",
 				CryptoKey:      "test_env.pem",
 				RateLimit:      15,
+				GrpcAddress:    "localhost:8082",
 			},
 		},
 		{

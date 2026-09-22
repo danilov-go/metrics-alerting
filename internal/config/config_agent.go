@@ -15,7 +15,7 @@ import (
 
 // ConfigAgent определяет конфигурацию агента.
 type ConfigAgent struct {
-	// Net содержит сетевой адрес для запуска агента.
+	// Net содержит адрес для запуска HTTP-клиента.
 	Net NetAddress `env:"ADDRESS" json:"address"`
 	// PollInterval определяет интервал сбора метрик.
 	PollInterval DurationSeconds `env:"POLL_INTERVAL" json:"poll_interval"`
@@ -27,6 +27,8 @@ type ConfigAgent struct {
 	CryptoKey string `env:"CRYPTO_KEY" json:"crypto_key"`
 	// RateLimit ограничивает количество исходящих запросов.
 	RateLimit int `env:"RATE_LIMIT"`
+	// GrpcAddress содержит адрес для запуска gRPC-клиента.
+	GrpcAddress string `env:"GRPC_ADDRESS" json:"grpc_address"`
 }
 
 // Get парсит конфигурацию агента.
@@ -49,6 +51,7 @@ func (a *ConfigAgent) Get() error {
 	f.IntVar(&cfgFlags.RateLimit, "l", 0, "RateLimit")
 	f.StringVar(&cfgFlags.Key, "k", "", "Key")
 	f.StringVar(&cfgFlags.CryptoKey, "crypto-key", "", "CryptoKey")
+	f.StringVar(&cfgFlags.GrpcAddress, "g", "", "GrpcAddress")
 	if err := f.Parse(os.Args[1:]); err != nil {
 		return err
 	}
