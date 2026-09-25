@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
@@ -62,12 +63,19 @@ func main() {
 	if err != nil {
 		logger.Log.Sugar().Fatal("ошибка парсинга TrustedSubnet")
 	}
-	grpcServ, err := initGRPC(configs, ipNet, storage, logger.Log)
+	var privatKey *rsa.PrivateKey
+	if configs.CryptoKey != "" {
+		privatKey, err = configs.GetKey()
+		if err != nil {
+			logger.Log.Sugar().Fatal("ошибка загрузки или парсинга приватного ключа сервера")
+		}
+	}
+	grpcServ, err := initGRPC(configs, ipNet, storage, logger.Log, privatKey)
 	if err != nil {
 		logger.Log.Sugar().Fatalw("ошибка инициализации gRPC сервера", "error", err)
 	}
-	r := initRouter(configs, storage, event, fileSub, urlSub, ipNet)
-	runProffServer()
+	r := initRouter(configs, storage, event, fileSub, urlSub, ipNet, privatKey)
+	runServerPprof()
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	defer stop()

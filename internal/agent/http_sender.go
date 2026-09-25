@@ -45,15 +45,15 @@ func NewHTTPSender(serverURL string, key string, hostIP string, l log) *HTTPSend
 }
 
 // Send преобразует и отправляет метрики на HTTP-сервер.
-func (a *HTTPSender) Send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey) {
+func (s *HTTPSender) Send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey) {
 	jsonMetric, err := json.Marshal(metrics)
 	if err != nil {
-		a.logger.Errorw("ошибка сериализации", "err", err)
+		s.logger.Errorw("ошибка сериализации", "err", err)
 		return
 	}
 	var hash string
-	if a.key != "" {
-		h := hmac.New(sha256.New, []byte(a.key))
+	if s.key != "" {
+		h := hmac.New(sha256.New, []byte(s.key))
 		h.Write(jsonMetric)
 		hash = hex.EncodeToString(h.Sum(nil))
 	}
@@ -61,15 +61,15 @@ func (a *HTTPSender) Send(ctx context.Context, metrics []models.Metrics, publicK
 	wg := gzip.NewWriter(&buf)
 	_, err = wg.Write(jsonMetric)
 	if err != nil {
-		a.logger.Errorw("ошибка сжатия данных", "err", err)
+		s.logger.Errorw("ошибка сжатия данных", "err", err)
 		if errClose := wg.Close(); errClose != nil {
-			a.logger.Errorw("ошибка закрытия gzip writer", "error", errClose)
+			s.logger.Errorw("ошибка закрытия gzip writer", "error", errClose)
 		}
 		return
 	}
 	err = wg.Close()
 	if err != nil {
-		a.logger.Errorw("ошибка закрытия gzip writer", "error", err)
+		s.logger.Errorw("ошибка закрытия gzip writer", "error", err)
 		return
 	}
 	body := buf.Bytes()
@@ -78,37 +78,37 @@ func (a *HTTPSender) Send(ctx context.Context, metrics []models.Metrics, publicK
 	if publicKey != nil {
 		cipherBody, cipherKey, err = encrypt(publicKey, body)
 		if err != nil {
-			a.logger.Errorw("ошибка шифрования", "error", err)
+			s.logger.Errorw("ошибка шифрования", "error", err)
 			return
 		}
 		body = cipherBody
 	}
-	req := a.client.R().
+	req := s.client.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Content-Encoding", "gzip").
 		SetBody(body)
 
-	if a.key != "" {
+	if s.key != "" {
 		req.SetHeader("HashSHA256", hash)
 	}
 	if publicKey != nil {
 		req.SetHeader("Crypto-Key", hex.EncodeToString(cipherKey))
 	}
-	if a.host != "" {
-		req.SetHeader("X-Real-IP", a.host)
+	if s.host != "" {
+		req.SetHeader("X-Real-IP", s.host)
 	}
 	response, err := req.Post("/updates/")
 	if err != nil {
-		a.logger.Errorw("попытки отправки исчерпаны", "error", err)
+		s.logger.Errorw("попытки отправки исчерпаны", "error", err)
 		return
 	}
 	if response == nil {
-		a.logger.Errorw("не удалось получить ответ от сервера: response равен nil")
+		s.logger.Errorw("не удалось получить ответ от сервера: response равен nil")
 		return
 	}
 	if response.StatusCode() != http.StatusOK {
-		a.logger.Errorw("статус запроса:", "status", response.StatusCode())
+		s.logger.Errorw("статус запроса:", "status", response.StatusCode())
 		return
 	}
 }
@@ -136,8 +136,4 @@ func encrypt(publicKey *rsa.PublicKey, body []byte) ([]byte, []byte, error) {
 		return nil, nil, err
 	}
 	return cipherBody, cipherKey, nil
-}
-
-func (a *HTTPSender) Close() error {
-	return nil
 }

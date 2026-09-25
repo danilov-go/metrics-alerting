@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -45,7 +46,14 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	defer stop()
-	client := agent.New(*configs, logger.Log.Sugar())
-	defer func() { _ = client.Sender.Close() }()
+	client, err := agent.New(*configs, logger.Log.Sugar())
+	if err != nil {
+		logger.Log.Sugar().Fatalw("ошибка инициализации клиента", "error", err)
+	}
+	defer func() {
+		if closer, ok := client.Sender.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	}()
 	client.Run(ctx, publicKey)
 }

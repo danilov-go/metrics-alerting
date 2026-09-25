@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
@@ -18,6 +16,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/crypto"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,16 +50,7 @@ func TestHTTPSender(t *testing.T) {
 		if cryptoKeyHex != "" {
 			cipherKey, err := hex.DecodeString(cryptoKeyHex)
 			require.NoError(t, err)
-			aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, cipherKey, nil)
-			require.NoError(t, err)
-			block, err := aes.NewCipher(aesKey)
-			require.NoError(t, err)
-			aesGCM, err := cipher.NewGCM(block)
-			require.NoError(t, err)
-			nonceSize := aesGCM.NonceSize()
-			require.GreaterOrEqual(t, len(body), nonceSize)
-			nonce, ciphertext := body[:nonceSize], body[nonceSize:]
-			body, err = aesGCM.Open(nil, nonce, ciphertext, nil)
+			body, err = crypto.DecryptBody(cipherKey, body, privateKey)
 			require.NoError(t, err)
 		}
 		gzipReader, err := gzip.NewReader(bytes.NewReader(body))
@@ -83,6 +73,4 @@ func TestHTTPSender(t *testing.T) {
 	require.NoError(t, err)
 	sender := NewHTTPSender(u.Host, testKey, testIP, logger.Sugar())
 	sender.Send(context.Background(), metrics, publicKey)
-	err = sender.Close()
-	assert.Nil(t, err)
 }

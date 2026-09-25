@@ -3,7 +3,7 @@ syntax = "proto3";
 package metrics;
 
 // При необходимости поправьте go_package в соответствии со структурой вашего проекта.
-option go_package = "github.com/danilov-go/metrics-alerting.git/internal/proto";
+option go_package = "github.com/danilov-go/metrics-alerting.git/internal/proto;proto";
 
 // Metric определяет единичную метрику.
 message Metric {
@@ -27,6 +27,10 @@ message UpdateMetricsRequest {
   repeated Metric metrics = 1;
 }
 
+message EncryptedMetricsRequest {
+  bytes cipher = 1 ;
+}
+
 // UpdateMetricsResponse — пустой ответ для подтверждения успешного обновления.
 message UpdateMetricsResponse {}
 
@@ -35,4 +39,6 @@ service Metrics {
   // UpdateMetrics обновляет метрики на сервере.
   // Этот метод подходит для отправки как единичных метрик, так и батчей.
   rpc UpdateMetrics(UpdateMetricsRequest) returns (UpdateMetricsResponse);
+
+  rpc DecryptedMetrics(EncryptedMetricsRequest) returns (UpdateMetricsResponse); 
 } 

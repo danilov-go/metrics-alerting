@@ -234,6 +234,9 @@ func (m *MemStorage) run() {
 		for range t.C {
 			err := m.SaveFile()
 			if err != nil {
+				if _, pathErr := os.Stat(m.filePath); os.IsNotExist(pathErr) {
+					return
+				}
 				m.logger.Errorw("ошибка сохранения в файл", "error", err)
 			}
 		}

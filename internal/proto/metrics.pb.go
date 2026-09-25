@@ -184,6 +184,50 @@ func (x *UpdateMetricsRequest) GetMetrics() []*Metric {
 	return nil
 }
 
+type EncryptedMetricsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cipher        []byte                 `protobuf:"bytes,1,opt,name=cipher,proto3" json:"cipher,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EncryptedMetricsRequest) Reset() {
+	*x = EncryptedMetricsRequest{}
+	mi := &file_metrics_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EncryptedMetricsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EncryptedMetricsRequest) ProtoMessage() {}
+
+func (x *EncryptedMetricsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_metrics_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EncryptedMetricsRequest.ProtoReflect.Descriptor instead.
+func (*EncryptedMetricsRequest) Descriptor() ([]byte, []int) {
+	return file_metrics_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *EncryptedMetricsRequest) GetCipher() []byte {
+	if x != nil {
+		return x.Cipher
+	}
+	return nil
+}
+
 // UpdateMetricsResponse — пустой ответ для подтверждения успешного обновления.
 type UpdateMetricsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -193,7 +237,7 @@ type UpdateMetricsResponse struct {
 
 func (x *UpdateMetricsResponse) Reset() {
 	*x = UpdateMetricsResponse{}
-	mi := &file_metrics_proto_msgTypes[2]
+	mi := &file_metrics_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -205,7 +249,7 @@ func (x *UpdateMetricsResponse) String() string {
 func (*UpdateMetricsResponse) ProtoMessage() {}
 
 func (x *UpdateMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_metrics_proto_msgTypes[2]
+	mi := &file_metrics_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -218,7 +262,7 @@ func (x *UpdateMetricsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMetricsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_metrics_proto_rawDescGZIP(), []int{2}
+	return file_metrics_proto_rawDescGZIP(), []int{3}
 }
 
 var File_metrics_proto protoreflect.FileDescriptor
@@ -235,10 +279,13 @@ const file_metrics_proto_rawDesc = "" +
 	"\x05GAUGE\x10\x00\x12\v\n" +
 	"\aCOUNTER\x10\x01\"A\n" +
 	"\x14UpdateMetricsRequest\x12)\n" +
-	"\ametrics\x18\x01 \x03(\v2\x0f.metrics.MetricR\ametrics\"\x17\n" +
-	"\x15UpdateMetricsResponse2Y\n" +
+	"\ametrics\x18\x01 \x03(\v2\x0f.metrics.MetricR\ametrics\"1\n" +
+	"\x17EncryptedMetricsRequest\x12\x16\n" +
+	"\x06cipher\x18\x01 \x01(\fR\x06cipher\"\x17\n" +
+	"\x15UpdateMetricsResponse2\xaf\x01\n" +
 	"\aMetrics\x12N\n" +
-	"\rUpdateMetrics\x12\x1d.metrics.UpdateMetricsRequest\x1a\x1e.metrics.UpdateMetricsResponseB;Z9github.com/danilov-go/metrics-alerting.git/internal/protob\x06proto3"
+	"\rUpdateMetrics\x12\x1d.metrics.UpdateMetricsRequest\x1a\x1e.metrics.UpdateMetricsResponse\x12T\n" +
+	"\x10DecryptedMetrics\x12 .metrics.EncryptedMetricsRequest\x1a\x1e.metrics.UpdateMetricsResponseBAZ?github.com/danilov-go/metrics-alerting.git/internal/proto;protob\x06proto3"
 
 var (
 	file_metrics_proto_rawDescOnce sync.Once
@@ -253,20 +300,23 @@ func file_metrics_proto_rawDescGZIP() []byte {
 }
 
 var file_metrics_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_metrics_proto_goTypes = []any{
-	(Metric_MType)(0),             // 0: metrics.Metric.MType
-	(*Metric)(nil),                // 1: metrics.Metric
-	(*UpdateMetricsRequest)(nil),  // 2: metrics.UpdateMetricsRequest
-	(*UpdateMetricsResponse)(nil), // 3: metrics.UpdateMetricsResponse
+	(Metric_MType)(0),               // 0: metrics.Metric.MType
+	(*Metric)(nil),                  // 1: metrics.Metric
+	(*UpdateMetricsRequest)(nil),    // 2: metrics.UpdateMetricsRequest
+	(*EncryptedMetricsRequest)(nil), // 3: metrics.EncryptedMetricsRequest
+	(*UpdateMetricsResponse)(nil),   // 4: metrics.UpdateMetricsResponse
 }
 var file_metrics_proto_depIdxs = []int32{
 	0, // 0: metrics.Metric.type:type_name -> metrics.Metric.MType
 	1, // 1: metrics.UpdateMetricsRequest.metrics:type_name -> metrics.Metric
 	2, // 2: metrics.Metrics.UpdateMetrics:input_type -> metrics.UpdateMetricsRequest
-	3, // 3: metrics.Metrics.UpdateMetrics:output_type -> metrics.UpdateMetricsResponse
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
+	3, // 3: metrics.Metrics.DecryptedMetrics:input_type -> metrics.EncryptedMetricsRequest
+	4, // 4: metrics.Metrics.UpdateMetrics:output_type -> metrics.UpdateMetricsResponse
+	4, // 5: metrics.Metrics.DecryptedMetrics:output_type -> metrics.UpdateMetricsResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
@@ -283,7 +333,7 @@ func file_metrics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_metrics_proto_rawDesc), len(file_metrics_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

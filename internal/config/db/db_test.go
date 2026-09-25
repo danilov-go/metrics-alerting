@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var errTest = errors.New("error test")
@@ -506,4 +508,14 @@ func Test_storageDB_Close(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInitDB(t *testing.T) {
+	sqlMock, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = sqlMock.Close() }()
+	mock.ExpectExec("SELECT.*").WillReturnError(sql.ErrConnDone)
+	s, err := db.InitDB("test")
+	assert.Error(t, err)
+	assert.Nil(t, s)
 }

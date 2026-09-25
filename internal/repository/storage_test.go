@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/danilov-go/metrics-alerting.git/internal/repository"
@@ -505,4 +506,52 @@ func TestMemStorage_Close(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = os.Stat(testPath)
 	require.NoError(t, err)
+}
+
+func TestMemStorage_InitMemStorage(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	testDir := t.TempDir()
+	filePath := filepath.Join(testDir, "test.txt")
+	err := os.WriteFile(filePath, []byte("[]"), 0644)
+	require.NoError(t, err)
+	tests := []struct {
+		name string
+		cfg  repository.ConfigFile
+	}{
+		{
+			name: "инициализация без востановления и сохранения данных из файла",
+			cfg: repository.ConfigFile{
+				Path:     "",
+				Interval: 0,
+				Restore:  false,
+			},
+		},
+		{
+			name: "инициализация с восстановлением данных из файла",
+			cfg: repository.ConfigFile{
+				Path:     filePath,
+				Interval: 0,
+				Restore:  true,
+			},
+		},
+		{
+			name: "инициализация с запуском метода run()",
+			cfg: repository.ConfigFile{
+				Path:     filePath,
+				Interval: time.Millisecond * 1,
+				Restore:  false,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage := repository.InitMemStorage(tt.cfg, logger.Sugar())
+			require.NotNil(t, storage)
+			assert.NotNil(t, storage.Gauges)
+			assert.NotNil(t, storage.Counters)
+			if tt.cfg.Interval != 0 {
+				time.Sleep(100 * time.Millisecond)
+			}
+		})
+	}
 }

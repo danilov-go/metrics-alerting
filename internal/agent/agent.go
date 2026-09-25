@@ -11,12 +11,13 @@ import (
 
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // MetricSender определяет общий интерфейс для отправки метрик.
 type MetricSender interface {
 	Send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey)
-	Close() error
 }
 
 type log interface {
@@ -35,7 +36,7 @@ type Agent struct {
 }
 
 // New создает новый экземпляр Agent.
-func New(cfg config.ConfigAgent, l log) *Agent {
+func New(cfg config.ConfigAgent, l log) (*Agent, error) {
 	agent := &Agent{
 		logger:         l,
 		pollInterval:   int(cfg.PollInterval),
@@ -43,23 +44,27 @@ func New(cfg config.ConfigAgent, l log) *Agent {
 		rateLimit:      cfg.RateLimit,
 	}
 	if cfg.GrpcAddress != "" {
+		conn, err := grpc.NewClient(cfg.GrpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, err
+		}
 		host, err := config.GetHost(cfg.GrpcAddress)
 		if err != nil {
 			l.Fatalw("ошибка получения host агента", "error", err)
 		}
-		grpcSender, err := NewGRPCSender(cfg.GrpcAddress, host, l)
+		grpcSender, err := NewGRPCSender(conn, host, l)
 		if err != nil {
 			l.Fatalw("не удалось инициализировать gRPC клиент", "error", err)
 		}
 		agent.Sender = grpcSender
-		return agent
+		return agent, nil
 	}
 	host, err := config.GetHost(cfg.Net.String())
 	if err != nil {
 		l.Fatalw("ошибка получения host агента", "error", err)
 	}
 	agent.Sender = NewHTTPSender(cfg.Net.String(), cfg.Key, host, l)
-	return agent
+	return agent, nil
 }
 
 // Run запускает процесс сбора и отправки метрик на сервер.

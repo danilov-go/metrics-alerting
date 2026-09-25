@@ -2,8 +2,12 @@ package agent
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/base64"
 	"testing"
 
+	"github.com/danilov-go/metrics-alerting.git/internal/crypto"
 	pb "github.com/danilov-go/metrics-alerting.git/internal/proto"
 	"go.uber.org/zap/zaptest"
 
@@ -13,9 +17,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestGRPCSender(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	publicKey := &privateKey.PublicKey
 	logger := zaptest.NewLogger(t)
 	gaugeVal := 123.45
 	counterDelta := int64(5)
@@ -25,12 +33,22 @@ func TestGRPCSender(t *testing.T) {
 	}
 	testHost := "10.0.0.1"
 	testInterceptor := func(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-		assert.Contains(t, method, "UpdateMetrics")
+		assert.Contains(t, method, "DecryptedMetrics")
 		md, ok := metadata.FromOutgoingContext(ctx)
 		require.True(t, ok)
 		assert.Equal(t, testHost, md.Get("x-real-ip")[0])
-		updateReq, ok := req.(*pb.UpdateMetricsRequest)
+		cipherReq, ok := req.(*pb.EncryptedMetricsRequest)
 		require.True(t, ok)
+		body := cipherReq.GetCipher()
+		cryptoKeyHex := md.Get("crypto-key")
+		require.NotEmpty(t, cryptoKeyHex)
+		cipherKey, err := base64.StdEncoding.DecodeString(cryptoKeyHex[0])
+		require.NoError(t, err)
+		body, err = crypto.DecryptBody(cipherKey, body, privateKey)
+		require.NoError(t, err)
+		var updateReq pb.UpdateMetricsRequest
+		err = proto.Unmarshal(body, &updateReq)
+		require.NoError(t, err)
 		require.Len(t, updateReq.Metrics, 2)
 		assert.Equal(t, "Alloc", updateReq.Metrics[0].Id)
 		assert.Equal(t, pb.Metric_GAUGE, updateReq.Metrics[0].Type)
@@ -45,12 +63,15 @@ func TestGRPCSender(t *testing.T) {
 		grpc.WithUnaryInterceptor(testInterceptor),
 	)
 	require.NoError(t, err)
-	defer conn.Close()
-	sender, err := NewGRPCSender(testHost, testHost, logger.Sugar())
+	sender, err := NewGRPCSender(conn, testHost, logger.Sugar())
+	defer func() {
+		err := sender.Close()
+		assert.NoError(t, err)
+		err = sender.Close()
+		assert.Error(t, err)
+	}()
 	require.NoError(t, err)
 	sender.client = pb.NewMetricsClient(conn)
 	sender.conn = conn
-	sender.Send(context.Background(), metrics, nil)
-	err = sender.Close()
-	assert.NoError(t, err)
+	sender.Send(context.Background(), metrics, publicKey)
 }

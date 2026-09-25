@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rsa"
 	"net"
 	"net/http"
 	"time"
@@ -39,36 +40,38 @@ func initStorage(configs config.ConfigServer) handler.Storage {
 	return repository.InitMemStorage(cfg, logger.Log.Sugar())
 }
 
-func initRouter(configs config.ConfigServer, storage handler.Storage, event *audit.Event, fileSub *audit.FileSubscriber, urlSub *audit.URLSubscriber, ipNet *net.IPNet) chi.Router {
+func initRouter(configs config.ConfigServer, storage handler.Storage, event *audit.Event, fileSub *audit.FileSubscriber, urlSub *audit.URLSubscriber, ipNet *net.IPNet, privatKey *rsa.PrivateKey) chi.Router {
 	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
 	r := chi.NewRouter()
-	if ipNet != nil {
-		r.Use(handler.TrustedMiddleware(ipNet))
-	}
-	r.Use(handler.RequestLogger(logger.Log))
-	if configs.CryptoKey != "" {
-		privatKey, err := configs.GetKey()
-		if err != nil {
-			logger.Log.Sugar().Fatal("ошибка загрузки или парсинга приватного ключа сервера")
+	public := func(router chi.Router) {
+		router.Use(handler.RequestLogger(logger.Log))
+		if configs.CryptoKey != "" {
+			router.Use(handler.CryptoMiddleware(privatKey))
 		}
-		r.Use(handler.CryptoMiddleware(privatKey))
+		router.Use(handler.GzipMiddleware)
+		router.Use(handler.HashMiddleware(configs.Key))
 	}
-	r.Use(handler.GzipMiddleware)
-	r.Use(handler.HashMiddleware(configs.Key))
-	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
-	r.Post("/value", h.APIValueHandler())
-	r.Post("/value/", h.APIValueHandler())
-	r.Get("/ping", h.PingHandler())
-	r.Get("/", h.ExposeMetricsHandler())
-	r.Group(func(r chi.Router) {
+	r.Group(func(pub chi.Router) {
+		public(pub)
+		pub.Get("/value/{mType}/{mName}", h.GetMetricHandler())
+		pub.Post("/value", h.APIValueHandler())
+		pub.Post("/value/", h.APIValueHandler())
+		pub.Get("/ping", h.PingHandler())
+		pub.Get("/", h.ExposeMetricsHandler())
+	})
+	r.Group(func(pub chi.Router) {
+		if ipNet != nil {
+			pub.Use(handler.TrustedMiddleware(ipNet))
+		}
 		if fileSub != nil || urlSub != nil {
-			r.Use(handler.AuditMiddleware(event))
+			pub.Use(handler.AuditMiddleware(event))
 		}
-		r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
-		r.Post("/updates", h.APIUpdatesHandler())
-		r.Post("/updates/", h.APIUpdatesHandler())
-		r.Post("/update", h.APIUpdateHandler())
-		r.Post("/update/", h.APIUpdateHandler())
+		public(pub)
+		pub.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
+		pub.Post("/updates", h.APIUpdatesHandler())
+		pub.Post("/updates/", h.APIUpdatesHandler())
+		pub.Post("/update", h.APIUpdateHandler())
+		pub.Post("/update/", h.APIUpdateHandler())
 	})
 	return r
 }
@@ -108,7 +111,7 @@ func initAudit(configs config.ConfigServer, client *resty.Client) (*audit.Event,
 	return event, fileSub, urlSub
 }
 
-func runProffServer() {
+func runServerPprof() {
 	go func() {
 		if err := http.ListenAndServe(":8081", nil); err != nil {
 			logger.Log.Sugar().Errorw("ошибка запуска pprof сервера", "err", err)
@@ -116,7 +119,7 @@ func runProffServer() {
 	}()
 }
 
-func initGRPC(configs config.ConfigServer, iPNet *net.IPNet, storage handler.Storage, l *zap.Logger) (*server.GRPCServer, error) {
+func initGRPC(configs config.ConfigServer, iPNet *net.IPNet, storage handler.Storage, l *zap.Logger, privatKey *rsa.PrivateKey) (*server.GRPCServer, error) {
 	if configs.GrpcAddress == "" {
 		return nil, nil
 	}
@@ -127,7 +130,7 @@ func initGRPC(configs config.ConfigServer, iPNet *net.IPNet, storage handler.Sto
 	gServ := grpc.NewServer(
 		grpc.UnaryInterceptor(handler.UnaryInterceptor(iPNet)),
 	)
-	h := handler.NewGRPCHandler(storage, l.Sugar())
+	h := handler.NewGRPCHandler(storage, l.Sugar(), privatKey)
 	pb.RegisterMetricsServer(gServ, h)
 	serv := server.NewGRPC(configs.GrpcAddress, l.Sugar(), gServ, listen)
 	return serv, nil

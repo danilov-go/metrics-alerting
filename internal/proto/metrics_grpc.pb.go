@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Metrics_UpdateMetrics_FullMethodName = "/metrics.Metrics/UpdateMetrics"
+	Metrics_UpdateMetrics_FullMethodName    = "/metrics.Metrics/UpdateMetrics"
+	Metrics_DecryptedMetrics_FullMethodName = "/metrics.Metrics/DecryptedMetrics"
 )
 
 // MetricsClient is the client API for Metrics service.
@@ -31,6 +32,7 @@ type MetricsClient interface {
 	// UpdateMetrics обновляет метрики на сервере.
 	// Этот метод подходит для отправки как единичных метрик, так и батчей.
 	UpdateMetrics(ctx context.Context, in *UpdateMetricsRequest, opts ...grpc.CallOption) (*UpdateMetricsResponse, error)
+	DecryptedMetrics(ctx context.Context, in *EncryptedMetricsRequest, opts ...grpc.CallOption) (*UpdateMetricsResponse, error)
 }
 
 type metricsClient struct {
@@ -51,6 +53,16 @@ func (c *metricsClient) UpdateMetrics(ctx context.Context, in *UpdateMetricsRequ
 	return out, nil
 }
 
+func (c *metricsClient) DecryptedMetrics(ctx context.Context, in *EncryptedMetricsRequest, opts ...grpc.CallOption) (*UpdateMetricsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateMetricsResponse)
+	err := c.cc.Invoke(ctx, Metrics_DecryptedMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MetricsServer is the server API for Metrics service.
 // All implementations must embed UnimplementedMetricsServer
 // for forward compatibility.
@@ -60,6 +72,7 @@ type MetricsServer interface {
 	// UpdateMetrics обновляет метрики на сервере.
 	// Этот метод подходит для отправки как единичных метрик, так и батчей.
 	UpdateMetrics(context.Context, *UpdateMetricsRequest) (*UpdateMetricsResponse, error)
+	DecryptedMetrics(context.Context, *EncryptedMetricsRequest) (*UpdateMetricsResponse, error)
 	mustEmbedUnimplementedMetricsServer()
 }
 
@@ -72,6 +85,9 @@ type UnimplementedMetricsServer struct{}
 
 func (UnimplementedMetricsServer) UpdateMetrics(context.Context, *UpdateMetricsRequest) (*UpdateMetricsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateMetrics not implemented")
+}
+func (UnimplementedMetricsServer) DecryptedMetrics(context.Context, *EncryptedMetricsRequest) (*UpdateMetricsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DecryptedMetrics not implemented")
 }
 func (UnimplementedMetricsServer) mustEmbedUnimplementedMetricsServer() {}
 func (UnimplementedMetricsServer) testEmbeddedByValue()                 {}
@@ -112,6 +128,24 @@ func _Metrics_UpdateMetrics_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Metrics_DecryptedMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EncryptedMetricsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MetricsServer).DecryptedMetrics(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Metrics_DecryptedMetrics_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MetricsServer).DecryptedMetrics(ctx, req.(*EncryptedMetricsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Metrics_ServiceDesc is the grpc.ServiceDesc for Metrics service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -122,6 +156,10 @@ var Metrics_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UpdateMetrics",
 			Handler:    _Metrics_UpdateMetrics_Handler,
+		},
+		{
+			MethodName: "DecryptedMetrics",
+			Handler:    _Metrics_DecryptedMetrics_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
