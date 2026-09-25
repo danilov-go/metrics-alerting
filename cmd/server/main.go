@@ -2,21 +2,15 @@ package main
 
 import (
 	"context"
-	"net/http"
+	"crypto/rsa"
 	_ "net/http/pprof"
+	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
-	"github.com/danilov-go/metrics-alerting.git/internal/audit"
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
-	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
-	"github.com/danilov-go/metrics-alerting.git/internal/handler"
 	"github.com/danilov-go/metrics-alerting.git/internal/logger"
-	"github.com/danilov-go/metrics-alerting.git/internal/repository"
 	"github.com/danilov-go/metrics-alerting.git/internal/server"
-	"github.com/go-chi/chi/v5"
-	"github.com/go-resty/resty/v2"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -27,8 +21,7 @@ var (
 )
 
 func main() {
-	config.PrintBuild(buildVersion, buildDate, buildCommit)
-	var storage handler.Storage
+	config.PrintBuild(os.Stdout, buildVersion, buildDate, buildCommit)
 	configs := config.ConfigServer{
 		Net: config.NetAddress{
 			Host: "localhost",
@@ -41,8 +34,10 @@ func main() {
 		Key:             "",
 		AuditFile:       "",
 		AuditURL:        "",
+		TrustedSubnet:   "",
 		RetryDuration:   1,
 		RetryInterval:   2,
+		GrpcAddress:     "",
 	}
 	if err := logger.Initialize("info"); err != nil {
 		panic(err)
@@ -50,94 +45,37 @@ func main() {
 	if err := configs.Get(); err != nil {
 		logger.Log.Sugar().Fatal("ошибка загрузки конфигурации сервера")
 	}
-	cfg := repository.ConfigFile{
-		Path:     configs.FileStoragePath,
-		Interval: time.Duration(configs.StoreIntrval) * time.Second,
-		Restore:  configs.Restore,
-	}
-	var pg handler.Storage
-	var dbErr error
-	if configs.DatabaseDSN != "" {
-		pg, dbErr = db.InitDB(configs.DatabaseDSN)
-	}
-	if dbErr == nil && pg != nil {
-		duration := time.Duration(configs.RetryDuration) * time.Second
-		interval := time.Duration(configs.RetryInterval) * time.Second
-		storage = handler.NewErrorMiddleware(pg, duration, interval)
-	} else {
-		storage = repository.InitMemStorage(cfg, logger.Log.Sugar())
-	}
+	storage := initStorage(configs)
 	defer func() {
 		if err := storage.Close(); err != nil {
 			logger.Log.Sugar().Errorw("ошибка закрытия хралища", "error", err)
 		}
 	}()
-	client := resty.New().
-		SetTimeout(5 * time.Second).
-		SetRetryCount(int(configs.RetryDuration)).
-		SetRetryWaitTime(time.Duration(configs.RetryInterval) * time.Second).
-		AddRetryCondition(
-			func(r *resty.Response, err error) bool {
-				if err != nil {
-					return true
-				}
-				return r.StatusCode() >= 500 || r.StatusCode() == http.StatusTooManyRequests
-			},
-		)
-	event := audit.NewEvent(logger.Log.Sugar())
-	var validAudit bool
-	if configs.AuditFile != "" {
-		sub := audit.NewFileSubscriber(configs.AuditFile, logger.Log.Sugar())
-		if sub != nil {
-			event.Register(sub)
-			defer func() {
-				if err := sub.Close(); err != nil {
-					logger.Log.Sugar().Errorw("ошибка при закрытии файла аудита", "err", err)
-				}
-			}()
-			validAudit = true
-		}
+	clientAudit := initClient(configs)
+	event, fileSub, urlSub := initAudit(configs, clientAudit)
+	if fileSub != nil {
+		defer fileSub.Close()
 	}
-	if configs.AuditURL != "" {
-		sub := audit.NewURLSubscriber(configs.AuditURL, logger.Log.Sugar(), client)
-		if sub != nil {
-			event.Register(sub)
-			defer sub.Close()
-			validAudit = true
-		}
+	if urlSub != nil {
+		defer urlSub.Close()
 	}
-	h := handler.NewMetricsHandler(storage, logger.Log.Sugar())
-	r := chi.NewRouter()
-	r.Use(handler.RequestLogger(logger.Log))
+	ipNet, err := config.ParseTrustedSubnet(configs.TrustedSubnet)
+	if err != nil {
+		logger.Log.Sugar().Fatal("ошибка парсинга TrustedSubnet")
+	}
+	var privatKey *rsa.PrivateKey
 	if configs.CryptoKey != "" {
-		privatKey, err := configs.GetKey()
+		privatKey, err = configs.GetKey()
 		if err != nil {
 			logger.Log.Sugar().Fatal("ошибка загрузки или парсинга приватного ключа сервера")
 		}
-		r.Use(handler.CryptoMiddleware(privatKey))
 	}
-	r.Use(handler.GzipMiddleware)
-	r.Use(handler.HashMiddleware(configs.Key))
-	r.Get("/value/{mType}/{mName}", h.GetMetricHandler())
-	r.Post("/value", h.APIValueHandler())
-	r.Post("/value/", h.APIValueHandler())
-	r.Get("/ping", h.PingHandler())
-	r.Get("/", h.ExposeMetricsHandler())
-	r.Group(func(r chi.Router) {
-		if validAudit {
-			r.Use(handler.AuditMiddleware(event))
-		}
-		r.Post("/update/{mType}/{mName}/{mVal}", h.PostMetricsHandler())
-		r.Post("/updates", h.APIUpdatesHandler())
-		r.Post("/updates/", h.APIUpdatesHandler())
-		r.Post("/update", h.APIUpdateHandler())
-		r.Post("/update/", h.APIUpdateHandler())
-	})
-	go func() {
-		if err := http.ListenAndServe(":8081", nil); err != nil {
-			logger.Log.Sugar().Errorw("ошибка запуска pprof сервера", "err", err)
-		}
-	}()
+	grpcServ, err := initGRPC(configs, ipNet, storage, logger.Log, privatKey)
+	if err != nil {
+		logger.Log.Sugar().Fatalw("ошибка инициализации gRPC сервера", "error", err)
+	}
+	r := initRouter(configs, storage, event, fileSub, urlSub, ipNet, privatKey)
+	runServerPprof()
 	serv := server.New(configs.Net.String(), logger.Log.Sugar(), r)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	defer stop()
@@ -149,6 +87,15 @@ func main() {
 		<-gCtx.Done()
 		return serv.Stop()
 	})
+	if grpcServ != nil {
+		g.Go(func() error {
+			return grpcServ.Run()
+		})
+		g.Go(func() error {
+			<-gCtx.Done()
+			return grpcServ.Stop()
+		})
+	}
 	if err := g.Wait(); err != nil {
 		logger.Log.Sugar().Fatal("сервер аварийно завершил работу", "err", err)
 	}

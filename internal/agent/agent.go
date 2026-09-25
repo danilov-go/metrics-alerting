@@ -11,18 +11,24 @@ import (
 
 	"github.com/danilov-go/metrics-alerting.git/internal/config"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
-	"github.com/go-resty/resty/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
+
+// MetricSender определяет общий интерфейс для отправки метрик.
+type MetricSender interface {
+	Send(ctx context.Context, metrics []models.Metrics, publicKey *rsa.PublicKey)
+}
 
 type log interface {
 	Errorw(msg string, keysAndValues ...any)
+	Fatalw(msg string, keysAndValues ...any)
 }
 
 // Agent собирает метрики runtime/gopsutil и передает их на сервер.
 type Agent struct {
-	Client         *resty.Client
+	Sender         MetricSender
 	logger         log
-	key            string
 	pollInterval   int
 	reportInterval int
 	rateLimit      int
@@ -30,18 +36,35 @@ type Agent struct {
 }
 
 // New создает новый экземпляр Agent.
-func New(cfg config.ConfigAgent, l log) *Agent {
-	client := resty.New()
-	client.SetTimeout(time.Second * 1)
-	client.SetBaseURL("http://" + cfg.Net.String())
-	return &Agent{
-		Client:         client,
+func New(cfg config.ConfigAgent, l log) (*Agent, error) {
+	agent := &Agent{
 		logger:         l,
-		key:            cfg.Key,
 		pollInterval:   int(cfg.PollInterval),
 		reportInterval: int(cfg.ReportInterval),
 		rateLimit:      cfg.RateLimit,
 	}
+	if cfg.GrpcAddress != "" {
+		conn, err := grpc.NewClient(cfg.GrpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, err
+		}
+		host, err := config.GetHost(cfg.GrpcAddress)
+		if err != nil {
+			l.Fatalw("ошибка получения host агента", "error", err)
+		}
+		grpcSender, err := NewGRPCSender(conn, host, l)
+		if err != nil {
+			l.Fatalw("не удалось инициализировать gRPC клиент", "error", err)
+		}
+		agent.Sender = grpcSender
+		return agent, nil
+	}
+	host, err := config.GetHost(cfg.Net.String())
+	if err != nil {
+		l.Fatalw("ошибка получения host агента", "error", err)
+	}
+	agent.Sender = NewHTTPSender(cfg.Net.String(), cfg.Key, host, l)
+	return agent, nil
 }
 
 // Run запускает процесс сбора и отправки метрик на сервер.
@@ -64,7 +87,7 @@ func (a *Agent) worker(ctx context.Context, wg *sync.WaitGroup, metricsChan chan
 				if len(ch) == 0 {
 					continue
 				}
-				a.send(ctx, ch, publicKey)
+				a.Sender.Send(ctx, ch, publicKey)
 			}
 		}()
 	}

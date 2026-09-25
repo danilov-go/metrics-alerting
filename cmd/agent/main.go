@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"io"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -18,7 +20,7 @@ var (
 )
 
 func main() {
-	config.PrintBuild(buildVersion, buildDate, buildCommit)
+	config.PrintBuild(os.Stdout, buildVersion, buildDate, buildCommit)
 	configs := &config.ConfigAgent{
 		Net: config.NetAddress{
 			Host: "localhost",
@@ -44,6 +46,14 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	defer stop()
-	client := agent.New(*configs, logger.Log.Sugar())
+	client, err := agent.New(*configs, logger.Log.Sugar())
+	if err != nil {
+		logger.Log.Sugar().Fatalw("ошибка инициализации клиента", "error", err)
+	}
+	defer func() {
+		if closer, ok := client.Sender.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	}()
 	client.Run(ctx, publicKey)
 }

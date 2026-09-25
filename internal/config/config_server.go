@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"flag"
+	"net"
 	"os"
 
 	"dario.cat/mergo"
@@ -14,7 +15,7 @@ import (
 
 // ConfigServer определяет конфигурацию сервера.
 type ConfigServer struct {
-	// Net содержит сетевой адрес для запуска сервера.
+	// Net содержит адрес для запуска HTTP-сервера.
 	Net NetAddress `env:"ADDRESS" json:"address"`
 	// StoreInterval определяет интервал времени для сохранения метрик на диск.
 	StoreIntrval DurationSeconds `env:"STORE_INTERVAL" json:"store_interval"`
@@ -32,10 +33,14 @@ type ConfigServer struct {
 	AuditFile string `env:"AUDIT_FILE"`
 	// AuditURL содержит URL-адрес внешнего сервиса аудита.
 	AuditURL string `env:"AUDIT_URL"`
+	//TrustedSubnet определяет строковое представление бесклассовой адресации (CIDR).
+	TrustedSubnet string `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
 	// RetryDuration определяет продолжительность попыток повтора операций.
 	RetryDuration DurationSeconds `env:"RETRY_DURATION"`
 	// RetryInterval определяет интервал между повторными попытками выполнения операций.
 	RetryInterval DurationSeconds `env:"RETRY_INTERVAL"`
+	// GrpcAddress содержит адрес для запуска gRPC-сервера.
+	GrpcAddress string `env:"GRPC_ADDRESS" json:"grpc_address"`
 }
 
 // Get парсит конфигурацию сервера.
@@ -60,6 +65,8 @@ func (s *ConfigServer) Get() error {
 	f.StringVar(&cfgFlags.CryptoKey, "crypto-key", "", "CryptoKey")
 	f.StringVar(&cfgFlags.AuditFile, "audit-file", "", "AuditFile")
 	f.StringVar(&cfgFlags.AuditURL, "audit-url", "", "AuditURL")
+	f.StringVar(&cfgFlags.TrustedSubnet, "t", "", "TrustedSubnet")
+	f.StringVar(&cfgFlags.GrpcAddress, "g", "", "GrpcAddress")
 	f.BoolVar(&cfgFlags.Restore, "r", false, "Restore")
 	f.Var(&cfgFlags.RetryDuration, "retry-duration", "RetryDuration")
 	f.Var(&cfgFlags.RetryInterval, "retry-interval", "RetryInterval")
@@ -109,4 +116,16 @@ func (s *ConfigServer) GetKey() (*rsa.PrivateKey, error) {
 		return nil, errors.New("некорректный RSA-ключ")
 	}
 	return privateKey, nil
+}
+
+// ParseTrustedSubnet парсит CIDR-строку подсети в *net.IPNet.
+func ParseTrustedSubnet(trustedSubnet string) (*net.IPNet, error) {
+	if trustedSubnet == "" {
+		return nil, nil
+	}
+	_, ipNet, err := net.ParseCIDR(trustedSubnet)
+	if err != nil {
+		return nil, err
+	}
+	return ipNet, nil
 }

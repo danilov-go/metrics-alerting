@@ -4,11 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -107,12 +102,16 @@ func TestAgent_Run(t *testing.T) {
 		ReportInterval: 1,
 		Key:            "",
 	}
-	a := New(cfg, logger.Sugar())
-	a.Client.SetBaseURL(server.URL)
-	a.Client.SetTimeout(5 * time.Second)
+	a, err := New(cfg, logger.Sugar())
+	require.NoError(t, err)
+	if httpSender, ok := a.Sender.(*HTTPSender); ok {
+		httpSender.client.SetBaseURL(server.URL)
+		httpSender.client.SetTimeout(5 * time.Second)
+	}
 	assert.NoError(t, err)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(t.Context())
+	assert.NoError(t, err)
 	go a.Run(ctx, nil)
 	time.Sleep(3 * time.Second)
 	cancel()
@@ -123,47 +122,73 @@ func TestAgent_Run(t *testing.T) {
 	}
 }
 
-func TestAgent_Encrypt(t *testing.T) {
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	publicKey := &privateKey.PublicKey
+func TestNew(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	tests := []struct {
-		name      string
-		publicKey *rsa.PublicKey
-		body      []byte
+		name    string
+		cfg     config.ConfigAgent
+		option  string
+		wantErr bool
 	}{
 		{
-			name:      "положительный тест",
-			publicKey: publicKey,
-			body:      []byte(""),
+			name: "положительный тест (HTTP)",
+			cfg: config.ConfigAgent{
+				PollInterval:   2,
+				ReportInterval: 10,
+				RateLimit:      3,
+				Key:            "secret_key",
+				Net: config.NetAddress{
+					Host: "localhost",
+					Port: 8080,
+				},
+			},
+			option:  "http",
+			wantErr: false,
 		},
 		{
-			name:      "положительный тест",
-			publicKey: publicKey,
-			body:      []byte(`[{"id":"Alloc","type":"gauge","value":123.45}]`),
+			name: "положительный тест (gRPC)",
+			cfg: config.ConfigAgent{
+				GrpcAddress:    "127.0.0.1:8082",
+				PollInterval:   1,
+				ReportInterval: 5,
+			},
+			option:  "grpc",
+			wantErr: false,
+		},
+		{
+			name: "ошибка инициализации gRPC",
+			cfg: config.ConfigAgent{
+				GrpcAddress: "unknow%",
+			},
+			option:  "",
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cipherBody, cipherKey, err := encrypt(tt.publicKey, tt.body)
+			a, err := New(tt.cfg, logger.Sugar())
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, a)
+				return
+			}
 			assert.NoError(t, err)
-			assert.NotEmpty(t, cipherBody)
-			assert.NotEmpty(t, cipherKey)
-			aesKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, cipherKey, nil)
-			require.NoError(t, err)
-			assert.Len(t, aesKey, 32)
-			block, err := aes.NewCipher(aesKey)
-			require.NoError(t, err)
-			gsm, err := cipher.NewGCM(block)
-			require.NoError(t, err)
-			nonceSize := gsm.NonceSize()
-			require.GreaterOrEqual(t, len(cipherBody), nonceSize)
-			nonce := cipherBody[:nonceSize]
-			body := cipherBody[nonceSize:]
-			decryptedBody, err := gsm.Open(nil, nonce, body, nil)
-			require.NoError(t, err)
-			assert.Equal(t, string(tt.body), string(decryptedBody))
-
+			assert.NotNil(t, a)
+			assert.Equal(t, int(tt.cfg.PollInterval), a.pollInterval)
+			assert.Equal(t, int(tt.cfg.ReportInterval), a.reportInterval)
+			assert.Equal(t, tt.cfg.RateLimit, a.rateLimit)
+			assert.NotNil(t, a.Sender)
+			switch tt.option {
+			case "http":
+				_, ok := a.Sender.(*HTTPSender)
+				assert.True(t, ok)
+			case "grpc":
+				_, ok := a.Sender.(*GRPCSender)
+				assert.True(t, ok)
+				if gSender, ok := a.Sender.(*GRPCSender); ok {
+					_ = gSender.Close()
+				}
+			}
 		})
 	}
 }

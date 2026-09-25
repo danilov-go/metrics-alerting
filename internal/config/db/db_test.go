@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/danilov-go/metrics-alerting.git/internal/config/db"
 	"github.com/danilov-go/metrics-alerting.git/internal/models"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var errTest = errors.New("error test")
@@ -468,4 +470,52 @@ func Test_storageDB_Ping(t *testing.T) {
 			assert.ErrorIs(t, err, tt.wantErr)
 		})
 	}
+}
+
+func Test_storageDB_Close(t *testing.T) {
+	tests := []struct {
+		name      string
+		nilDB     bool
+		setupMock func(mock sqlmock.Sqlmock)
+	}{
+		{
+			name:  "положительный тест",
+			nilDB: false,
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectClose()
+			},
+		},
+		{
+			name:      "закрытие при db = nil",
+			nilDB:     true,
+			setupMock: func(mock sqlmock.Sqlmock) {},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.nilDB {
+				storage := db.NewStorageDB(nil)
+				err := storage.Close()
+				assert.NoError(t, err)
+			} else {
+				sql, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+				assert.NoError(t, err)
+				defer func() { _ = sql.Close() }()
+				tt.setupMock(mock)
+				storage := db.NewStorageDB(sql)
+				err = storage.Close()
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestInitDB(t *testing.T) {
+	sqlMock, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer func() { _ = sqlMock.Close() }()
+	mock.ExpectExec("SELECT.*").WillReturnError(sql.ErrConnDone)
+	s, err := db.InitDB("test")
+	assert.Error(t, err)
+	assert.Nil(t, s)
 }
